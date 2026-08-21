@@ -71,6 +71,14 @@ def overview(request: Request, dataset: str = "dos_clean"):
     return templates.TemplateResponse(request, "overview.html", ctx)
 
 
+@app.get("/settings", response_class=HTMLResponse)
+def settings(request: Request, dataset: str = "dos_clean"):
+    dataset = _validate_dataset(dataset)
+    ctx = _base_ctx(request, dataset, "settings")
+    ctx.update(summary=da.summary(dataset))
+    return templates.TemplateResponse(request, "settings.html", ctx)
+
+
 @app.get("/explore", response_class=HTMLResponse)
 def explore(request: Request, dataset: str = "dos_clean", highlight: str = "XGBoost"):
     dataset = _validate_dataset(dataset)

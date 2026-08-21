@@ -31,42 +31,11 @@
   </table>
 </div>
 
-<div class="panel tick" style="margin-bottom:28px;">
-  <div id="comparison-chart"></div>
-</div>
-
-<div class="section-title">Retrain pipeline</div>
 <div class="panel tick">
-  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
-    <label class="caption"><input type="checkbox" id="rt-tune"> hyperparameter tuning (slower)</label>
-    <label class="caption"><input type="checkbox" id="rt-autoencoder" checked> train autoencoder</label>
-    <button class="btn btn-primary" id="rt-btn" type="button">Run pipeline now</button>
-    <span id="rt-status" class="caption"></span>
-  </div>
-  <p class="caption" style="margin-top:10px;">Re-runs feature engineering and all four models on <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>. Takes 1 to 4 minutes.</p>
+  <div id="comparison-chart"></div>
 </div>
 
 <script>
 Plotly.newPlot("comparison-chart", {{ comparison_chart.data | tojson }}, {{ comparison_chart.layout | tojson }}, {displayModeBar: false, responsive: true});
-
-document.getElementById("rt-btn").addEventListener("click", () => {
-  const btn = document.getElementById("rt-btn");
-  const status = document.getElementById("rt-status");
-  btn.disabled = true;
-  status.textContent = "Starting...";
-  const fd = new FormData();
-  fd.append("dataset", {{ dataset|tojson }});
-  fd.append("tune", document.getElementById("rt-tune").checked ? "true" : "false");
-  fd.append("autoencoder", document.getElementById("rt-autoencoder").checked ? "true" : "false");
-  fetch("/api/retrain", {method: "POST", body: fd}).then(r => r.json()).then(({job_id}) => {
-    const poll = setInterval(() => {
-      fetch("/api/jobs/" + job_id).then(r => r.json()).then(({status: s, message}) => {
-        if (s === "running") { status.textContent = "Training..."; }
-        else if (s === "done") { clearInterval(poll); status.textContent = "Done. Reloading..."; location.reload(); }
-        else if (s === "error") { clearInterval(poll); btn.disabled = false; status.textContent = "Failed: " + message; }
-      });
-    }, 3000);
-  });
-});
 </script>
 {% endblock %}

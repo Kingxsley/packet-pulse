@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Settings · Packet Pulse{% endblock %}
+{% block content %}
+<div class="eyebrow">Admin</div>
+<h1 class="page-title">Settings</h1>
+<p class="page-sub">Maintenance actions for <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>. These affect the shared, live data every page reads from.</p>
+
+<div class="section-title">Retrain pipeline</div>
+<div class="panel tick" style="margin-bottom:28px;">
+  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <label class="caption"><input type="checkbox" id="rt-tune"> hyperparameter tuning (slower)</label>
+    <label class="caption"><input type="checkbox" id="rt-autoencoder" checked> train autoencoder</label>
+    <button class="btn btn-primary" id="rt-btn" type="button">Run pipeline now</button>
+    <span id="rt-status" class="caption"></span>
+  </div>
+  <p class="caption" style="margin-top:10px;">Re-runs feature engineering and all four models on <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>, straight from the raw packet captures in <code class="mono">data/raw/</code>. Takes 1 to 4 minutes and updates every page once it finishes.</p>
+</div>
+
+<div class="section-title">About this dataset</div>
+<div class="tbl-wrap panel tick">
+  <table>
+    <tbody>
+      <tr><td>Rows</td><td class="mono">{{ "{:,}".format(summary.rows) }}</td></tr>
+      <tr><td>Attack rate</td><td class="mono">{{ "%.2f"|format(summary.attack_rate_full*100) }}%</td></tr>
+      <tr><td>Train / test split</td><td class="mono">{{ "{:,}".format(summary.train_rows) }} / {{ "{:,}".format(summary.test_rows) }}</td></tr>
+      <tr><td>Features</td><td class="mono">{{ summary.features|join(", ") }}</td></tr>
+      <tr><td>Last training time</td><td class="mono">{{ "%.0f"|format(summary.elapsed_sec) }}s</td></tr>
+      <tr><td>Isolation Forest contamination</td><td class="mono">{{ "%.4f"|format(summary.isolation_forest_contamination) }}</td></tr>
+      <tr><td>Autoencoder trained</td><td class="mono">{{ summary.autoencoder_trained }}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+document.getElementById("rt-btn").addEventListener("click", () => {
+  const btn = document.getElementById("rt-btn");
+  const status = document.getElementById("rt-status");
+  btn.disabled = true;
+  status.textContent = "Starting...";
+  const fd = new FormData();
+  fd.append("dataset", {{ dataset|tojson }});
+  fd.append("tune", document.getElementById("rt-tune").checked ? "true" : "false");
+  fd.append("autoencoder", document.getElementById("rt-autoencoder").checked ? "true" : "false");
+  fetch("/api/retrain", {method: "POST", body: fd}).then(r => r.json()).then(({job_id}) => {
+    const poll = setInterval(() => {
+      fetch("/api/jobs/" + job_id).then(r => r.json()).then(({status: s, message}) => {
+        if (s === "running") { status.textContent = "Training..."; }
+        else if (s === "done") { clearInterval(poll); status.textContent = "Done. Reloading..."; location.reload(); }
+        else if (s === "error") { clearInterval(poll); btn.disabled = false; status.textContent = "Failed: " + message; }
+      });
+    }, 3000);
+  });
+});
+</script>
+{% endblock %}
