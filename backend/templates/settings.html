@@ -3,21 +3,10 @@
 {% block content %}
 <div class="eyebrow">Admin</div>
 <h1 class="page-title">Settings</h1>
-<p class="page-sub">Maintenance actions for <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>. These affect the shared, live data every page reads from.</p>
-
-<div class="section-title">Retrain pipeline</div>
-<div class="panel tick" style="margin-bottom:28px;">
-  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
-    <label class="caption"><input type="checkbox" id="rt-tune"> hyperparameter tuning (slower)</label>
-    <label class="caption"><input type="checkbox" id="rt-autoencoder" checked> train autoencoder</label>
-    <button class="btn btn-primary" id="rt-btn" type="button">Run pipeline now</button>
-    <span id="rt-status" class="caption"></span>
-  </div>
-  <p class="caption" style="margin-top:10px;">Re-runs feature engineering and all four models on <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>, straight from the raw packet captures in <code class="mono">data/raw/</code>. Takes 1 to 4 minutes and updates every page once it finishes.</p>
-</div>
+<p class="page-sub">Maintenance and model internals for <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>, tucked away here since they're not what a SOC analyst needs day to day.</p>
 
 <div class="section-title">About this dataset</div>
-<div class="tbl-wrap panel tick">
+<div class="tbl-wrap panel tick" style="margin-bottom:28px;">
   <table>
     <tbody>
       <tr><td>Rows</td><td class="mono">{{ "{:,}".format(summary.rows) }}</td></tr>
@@ -30,6 +19,28 @@
     </tbody>
   </table>
 </div>
+
+<details class="panel tick" style="margin-bottom:20px;">
+  <summary style="cursor:pointer; font-family:var(--font-display); font-weight:600; font-size:1.1rem;">Model performance (advanced)</summary>
+  <p class="caption" style="margin:14px 0;">Raw model internals: metrics tables, SHAP explainability, threshold tuning, feature distributions. Useful for whoever validates the models, not for daily triage, which is why it's not in the main nav.</p>
+  <div class="grid grid-4">
+    <a class="btn" href="/overview?dataset={{ dataset }}">Overview & metrics</a>
+    <a class="btn" href="/explore?dataset={{ dataset }}">Explore data</a>
+    <a class="btn" href="/compare?dataset={{ dataset }}">Model comparison</a>
+    <a class="btn" href="/importance?dataset={{ dataset }}">Feature importance</a>
+  </div>
+</details>
+
+<details class="panel tick">
+  <summary style="cursor:pointer; font-family:var(--font-display); font-weight:600; font-size:1.1rem;">Automation</summary>
+  <p class="caption" style="margin:14px 0;">Retraining runs in the background and doesn't need a person watching it. Trigger it manually below, or point a scheduler (cron, a Railway cron service, GitHub Actions) at <code class="mono">POST /api/retrain</code> with <code class="mono">dataset</code>/<code class="mono">tune</code>/<code class="mono">autoencoder</code> form fields to run it on a schedule without opening this page at all.</p>
+  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <label class="caption"><input type="checkbox" id="rt-tune"> hyperparameter tuning (slower)</label>
+    <label class="caption"><input type="checkbox" id="rt-autoencoder" checked> train autoencoder</label>
+    <button class="btn btn-primary" id="rt-btn" type="button">Run pipeline now</button>
+    <span id="rt-status" class="caption"></span>
+  </div>
+</details>
 
 <script>
 document.getElementById("rt-btn").addEventListener("click", () => {

@@ -1,6 +1,7 @@
 """Packet Pulse: FastAPI + server-rendered HTML replacement for the retired
 Streamlit dashboard (legacy/streamlit_dashboard/). Reuses src/ untouched.
 """
+import hashlib
 import sys
 import threading
 import uuid
@@ -19,7 +20,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend import charts, data_access as da, db, siem  # noqa: E402
 from backend.scoring import (DEFAULT_THRESHOLDS, MODEL_COLORS, MODEL_ORDER,  # noqa: E402
-                              apply_thresholds, outcome_counts, pred_col, score_col)
+                              apply_thresholds, outcome_counts, pred_col,
+                              score_col, severity_tier)
 from src import config  # noqa: E402
 from src.features import engineer_features  # noqa: E402
 
@@ -76,8 +78,15 @@ def root():
 @app.get("/monitor", response_class=HTMLResponse)
 def monitor(request: Request, dataset: str = "dos_clean"):
     dataset = _validate_dataset(dataset, allow_combined=True)
+    flagged = _incidents_df(dataset, "Random Forest")
+    top_attackers = (
+        flagged["source_ip"].value_counts().head(5).reset_index()
+        if not flagged.empty else pd.DataFrame(columns=["source_ip", "count"])
+    )
+    top_attackers.columns = ["source_ip", "count"]
     ctx = _base_ctx(request, dataset, "monitor")
-    ctx.update(model_order=MODEL_ORDER)
+    ctx.update(model_order=MODEL_ORDER, top_attackers=top_attackers.to_dict(orient="records"),
+                total_incidents=len(flagged))
     return templates.TemplateResponse(request, "monitor.html", ctx)
 
 
@@ -338,6 +347,15 @@ INCIDENT_COLS = ["timestamp", "source_ip", "source_port", "dest_ip", "dest_port"
                   "protocol", "packet_length", "label", "score", "source_dataset"]
 
 
+def _incident_id(dataset: str, row: dict) -> str:
+    """Identity for a flagged packet, independent of which model you're
+    currently viewing it through -- triage status on an incident shouldn't
+    reset just because you switched the flag model."""
+    ds = row.get("source_dataset") or dataset
+    key = f"{ds}|{row['timestamp']}|{row['source_ip']}|{row['source_port']}|{row['dest_ip']}|{row['dest_port']}"
+    return f"{dataset}:{hashlib.md5(key.encode()).hexdigest()[:12]}"
+
+
 def _incidents_df(dataset: str, flag_model: str) -> pd.DataFrame:
     df = apply_thresholds(_results_for(dataset), DEFAULT_THRESHOLDS)
     pc, sc = pred_col(flag_model), score_col(flag_model)
@@ -345,37 +363,64 @@ def _incidents_df(dataset: str, flag_model: str) -> pd.DataFrame:
         return df.iloc[0:0]
     flagged = df[df[pc] == 1].copy()
     flagged["score"] = flagged[sc] if sc in flagged else None
+    flagged["severity"] = flagged["score"].map(severity_tier)
+    flagged["incident_id"] = [
+        _incident_id(dataset, r) for r in flagged[["timestamp", "source_ip", "source_port",
+                                                     "dest_ip", "dest_port"] +
+                                                    (["source_dataset"] if "source_dataset" in flagged else [])
+                                                    ].to_dict(orient="records")
+    ]
     return flagged.sort_values("timestamp", ascending=False)
 
 
 @app.get("/incidents", response_class=HTMLResponse)
-def incidents(request: Request, dataset: str = "dos_clean", flag_model: str = "Random Forest", page: int = 1):
+def incidents(request: Request, dataset: str = "dos_clean", flag_model: str = "Random Forest",
+              status: str = "", page: int = 1):
     dataset = _validate_dataset(dataset, allow_combined=True)
     if flag_model not in MODEL_ORDER:
         flag_model = "Random Forest"
     df = _incidents_df(dataset, flag_model)
+
+    touched = db.all_statuses(dataset) if db.enabled() else {}
+    if status:
+        if status == "New":
+            df = df[~df["incident_id"].isin(touched)]
+        else:
+            keep_ids = {i for i, s in touched.items() if s == status}
+            df = df[df["incident_id"].isin(keep_ids)]
 
     page_size = 50
     total = len(df)
     total_pages = max(1, -(-total // page_size))
     page = max(1, min(page, total_pages))
     page_df = df.iloc[(page - 1) * page_size: page * page_size].copy()
-    cols = [c for c in INCIDENT_COLS if c in page_df.columns]
+    cols = [c for c in INCIDENT_COLS if c in page_df.columns] + ["severity", "incident_id"]
     if "timestamp" in page_df:
         page_df["timestamp"] = page_df["timestamp"].astype(str)
     rows = page_df[cols].where(pd.notna(page_df[cols]), None).to_dict(orient="records")
+    for r in rows:
+        r["status"] = touched.get(r["incident_id"], "New")
 
     ctx = _base_ctx(request, dataset, "incidents")
     ctx.update(flag_model=flag_model, model_order=MODEL_ORDER, rows=rows, total=total,
-                page=page, total_pages=total_pages, has_source_col="source_dataset" in df.columns)
+                page=page, total_pages=total_pages, has_source_col="source_dataset" in df.columns,
+                status_filter=status, status_choices=db.STATUS_CHOICES, db_enabled=db.enabled())
     return templates.TemplateResponse(request, "incidents.html", ctx)
+
+
+@app.post("/api/incidents/status")
+def update_incident_status(incident_id: str = Form(...), status: str = Form(...), note: str = Form("")):
+    if not db.enabled():
+        return JSONResponse({"ok": False, "message": "Postgres not configured."}, status_code=503)
+    db.set_status(incident_id, status, note or None)
+    return JSONResponse({"ok": True, "incident_id": incident_id, "status": status})
 
 
 @app.get("/api/incidents/export.csv")
 def export_incidents_csv(dataset: str = "dos_clean", flag_model: str = "Random Forest", limit: int = 5000):
     dataset = _validate_dataset(dataset, allow_combined=True)
     df = _incidents_df(dataset, flag_model).head(limit)
-    cols = [c for c in INCIDENT_COLS if c in df.columns]
+    cols = [c for c in INCIDENT_COLS if c in df.columns] + ["severity", "incident_id"]
     return PlainTextResponse(df[cols].to_csv(index=False), media_type="text/csv", headers={
         "Content-Disposition": f'attachment; filename="{dataset}_incidents.csv"',
     })

@@ -1,9 +1,31 @@
 {% extends "base.html" %}
-{% block title %}Threat Monitor · Packet Pulse{% endblock %}
+{% block title %}Dashboard · Packet Pulse{% endblock %}
 {% block content %}
 <div class="eyebrow">Live network monitor</div>
-<h1 class="page-title">Threat Monitor</h1>
-<p class="page-sub">Replays real captured traffic from <strong>{{ dataset_labels.get(dataset, dataset) }}</strong> through the trained models in near real time, packet by packet. This is a replay of recorded captures, not a live tap on your network. Anything flagged here shows up on the <a href="/incidents?dataset={{ dataset }}">Incidents</a> page for investigation and export. See <a href="/settings?dataset={{ dataset }}">Settings</a> for what a real deployment would need instead.</p>
+<h1 class="page-title">Dashboard</h1>
+<p class="page-sub">Replays real captured traffic from <strong>{{ dataset_labels.get(dataset, dataset) }}</strong> through the trained models in near real time, packet by packet. This is a replay of recorded captures, not a live tap on your network. Anything flagged here shows up on <a href="/incidents?dataset={{ dataset }}">Incidents</a> for triage and export. See <a href="/settings?dataset={{ dataset }}">Settings</a> for what a real deployment would need instead.</p>
+
+<div class="grid grid-2" style="margin-bottom:20px;">
+  <div class="panel tick">
+    <div class="section-title" style="margin-top:0;">Total incidents (Random Forest, all time)</div>
+    <div class="num mono" style="font-size:1.9rem;">{{ "{:,}".format(total_incidents) }}</div>
+    <p class="caption" style="margin-top:6px;"><a href="/incidents?dataset={{ dataset }}">Review and triage →</a></p>
+  </div>
+  <div class="panel tick">
+    <div class="section-title" style="margin-top:0;">Top attacking sources</div>
+    {% if top_attackers %}
+    <table>
+      <tbody>
+        {% for a in top_attackers %}
+        <tr><td class="mono">{{ a.source_ip }}</td><td class="mono" style="text-align:right;">{{ "{:,}".format(a.count) }} flagged</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="caption">Nothing flagged yet.</p>
+    {% endif %}
+  </div>
+</div>
 
 <div class="panel tick" style="margin-bottom:20px;">
   <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">

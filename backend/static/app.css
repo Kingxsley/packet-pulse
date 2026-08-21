@@ -107,6 +107,10 @@ input[type="range"] { width: 100%; accent-color: var(--signal); }
 .pill-fp { background: rgba(255,176,32,0.18); color: var(--signal); }
 .pill-fn { background: rgba(229,72,77,0.18); color: var(--alert); }
 .pill-tn { color: var(--fog-dim); }
+.sev-critical { background: rgba(229,72,77,0.22); color: var(--alert); font-weight: 600; }
+.sev-high { background: rgba(255,176,32,0.2); color: var(--signal); }
+.sev-medium { background: rgba(63,208,201,0.15); color: var(--pulse); }
+.sev-low { color: var(--fog-dim); }
 
 .upload-box { border: 1.5px dashed var(--line-strong); border-radius: 4px; padding: 24px; text-align: center; }
 .upload-box input[type="file"] { color: var(--fog); font-size: 0.85rem; }

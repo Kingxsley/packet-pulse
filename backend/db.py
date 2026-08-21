@@ -55,6 +55,14 @@ def init_db() -> bool:
                     preview JSONB
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS incident_status (
+                    incident_id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL DEFAULT 'New',
+                    note TEXT,
+                    updated_at TIMESTAMPTZ NOT NULL
+                )
+            """)
         _initialized = True
         return True
 
@@ -82,6 +90,53 @@ def save_import(dataset: str, source_label: str, flag_model: str,
             ),
         )
         return cur.fetchone()[0]
+
+
+STATUS_CHOICES = ["New", "Investigating", "Resolved", "False Positive"]
+
+
+def get_statuses(incident_ids: list[str]) -> dict[str, dict]:
+    """Returns {incident_id: {"status": ..., "note": ..., "updated_at": ...}}
+    for whichever of the given ids have a row; callers default the rest to
+    "New" themselves, since most incidents never get touched."""
+    if not enabled() or not incident_ids:
+        return {}
+    init_db()
+    with _connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT incident_id, status, note, updated_at FROM incident_status WHERE incident_id = ANY(%s)",
+            (list(incident_ids),),
+        )
+        return {row[0]: {"status": row[1], "note": row[2], "updated_at": row[3]} for row in cur.fetchall()}
+
+
+def set_status(incident_id: str, status: str, note: str | None = None) -> None:
+    if not enabled():
+        return
+    init_db()
+    if status not in STATUS_CHOICES:
+        status = "New"
+    with _connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO incident_status (incident_id, status, note, updated_at)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (incident_id) DO UPDATE
+               SET status = EXCLUDED.status, note = EXCLUDED.note, updated_at = EXCLUDED.updated_at""",
+            (incident_id, status, note, datetime.now(timezone.utc)),
+        )
+
+
+def all_statuses(dataset: str) -> dict[str, str]:
+    """All touched statuses for a dataset's incidents, keyed by incident_id.
+    Cheap because incident_status only ever holds rows someone actually
+    triaged, which is a small fraction of total incidents -- untouched
+    incidents are implicitly "New" and never get a row here."""
+    if not enabled():
+        return {}
+    init_db()
+    with _connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT incident_id, status FROM incident_status WHERE incident_id LIKE %s", (f"{dataset}:%",))
+        return dict(cur.fetchall())
 
 
 def list_imports(limit: int = 15) -> list[dict]:

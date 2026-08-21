@@ -56,3 +56,22 @@ def outcome_counts(y_true: pd.Series, y_pred: pd.Series) -> dict:
     counts = outcomes(y_true, y_pred).value_counts()
     return {k: int(counts.get(k, 0)) for k in
             ["True Positive", "False Positive", "False Negative", "True Negative"]}
+
+
+def severity_tier(score) -> str:
+    """Calibrated for the 0-1 probability models (Random Forest, XGBoost).
+    Isolation Forest/Autoencoder scores are unbounded anomaly scores, not
+    probabilities, so tiers there are an approximation: anything above 1
+    reads as Critical rather than being clamped or scaled against a
+    per-batch distribution."""
+    try:
+        s = float(score)
+    except (TypeError, ValueError):
+        return "Medium"
+    if s >= 0.9:
+        return "Critical"
+    if s >= 0.7:
+        return "High"
+    if s >= 0.4:
+        return "Medium"
+    return "Low"

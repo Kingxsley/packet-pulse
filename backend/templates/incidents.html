@@ -3,7 +3,7 @@
 {% block content %}
 <div class="eyebrow">Flagged for investigation</div>
 <h1 class="page-title">Incidents</h1>
-<p class="page-sub">Every packet <strong>{{ flag_model }}</strong> flagged in <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>{% if dataset == "combined" %} (DNS and DoS merged, tagged by source){% endif %}. Export for offline investigation, or forward straight to a SIEM.</p>
+<p class="page-sub">Every packet <strong>{{ flag_model }}</strong> flagged in <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>{% if dataset == "combined" %} (DNS and DoS merged, tagged by source){% endif %}. Triage, export for offline investigation, or forward straight to a SIEM.</p>
 
 <div class="panel tick" style="margin-bottom:20px;">
   <form method="get" style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
@@ -15,12 +15,24 @@
         {% endfor %}
       </select>
     </label>
-    <span class="caption mono">{{ "{:,}".format(total) }} incidents matched</span>
+    <label class="caption">Status
+      <select name="status" class="dataset-select" onchange="this.form.submit()">
+        <option value="" {{ 'selected' if not status_filter }}>All</option>
+        {% for s in status_choices %}
+        <option value="{{ s }}" {{ 'selected' if s==status_filter }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <span class="caption mono">{{ "{:,}".format(total) }} matched</span>
     <div class="spacer"></div>
     <a class="btn" href="/api/incidents/export.csv?dataset={{ dataset }}&flag_model={{ flag_model }}">Export CSV</a>
     <a class="btn" href="/api/incidents/export.cef?dataset={{ dataset }}&flag_model={{ flag_model }}">Export CEF</a>
   </form>
 </div>
+
+{% if not db_enabled %}
+<p class="caption" style="margin-bottom:20px;">Triage status is off (no DATABASE_URL set): every incident shows as "New" and status changes won't be saved.</p>
+{% endif %}
 
 <div class="section-title">Forward to SIEM (Splunk HTTP Event Collector)</div>
 <div class="panel tick" style="margin-bottom:20px;">
@@ -38,11 +50,11 @@
     <thead><tr>
       <th>time</th><th>source</th><th>dest</th><th>proto</th><th>len</th>
       {% if has_source_col %}<th>dataset</th>{% endif %}
-      <th>label</th><th>score</th>
+      <th>label</th><th>score</th><th>severity</th><th>status</th>
     </tr></thead>
     <tbody>
       {% for r in rows %}
-      <tr>
+      <tr data-incident-id="{{ r.incident_id }}">
         <td class="mono">{{ r.timestamp }}</td>
         <td class="mono">{{ r.source_ip }}:{{ r.source_port }}</td>
         <td class="mono">{{ r.dest_ip }}:{{ r.dest_port }}</td>
@@ -51,9 +63,17 @@
         {% if has_source_col %}<td>{{ r.source_dataset }}</td>{% endif %}
         <td>{% if r.label == 1 %}<span class="pill pill-fn">attack</span>{% elif r.label == 0 %}<span class="caption">normal</span>{% else %}<span class="caption">-</span>{% endif %}</td>
         <td class="mono">{{ "%.3f"|format(r.score) if r.score is not none else "-" }}</td>
+        <td><span class="pill sev-{{ r.severity|lower }}">{{ r.severity }}</span></td>
+        <td>
+          <select class="dataset-select status-select" data-incident-id="{{ r.incident_id }}" {{ 'disabled' if not db_enabled }}>
+            {% for s in status_choices %}
+            <option value="{{ s }}" {{ 'selected' if s==r.status }}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="caption" style="padding:20px;">No incidents matched this model on this dataset.</td></tr>
+      <tr><td colspan="10" class="caption" style="padding:20px;">No incidents matched this filter.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -61,9 +81,9 @@
 
 {% if total_pages > 1 %}
 <div style="display:flex; gap:10px; align-items:center;">
-  {% if page > 1 %}<a class="btn" href="?dataset={{ dataset }}&flag_model={{ flag_model }}&page={{ page - 1 }}">← Prev</a>{% endif %}
+  {% if page > 1 %}<a class="btn" href="?dataset={{ dataset }}&flag_model={{ flag_model }}&status={{ status_filter }}&page={{ page - 1 }}">← Prev</a>{% endif %}
   <span class="caption mono">page {{ page }} / {{ total_pages }}</span>
-  {% if page < total_pages %}<a class="btn" href="?dataset={{ dataset }}&flag_model={{ flag_model }}&page={{ page + 1 }}">Next →</a>{% endif %}
+  {% if page < total_pages %}<a class="btn" href="?dataset={{ dataset }}&flag_model={{ flag_model }}&status={{ status_filter }}&page={{ page + 1 }}">Next →</a>{% endif %}
 </div>
 {% endif %}
 
@@ -87,6 +107,21 @@ document.getElementById("hec-send").addEventListener("click", () => {
         : `Failed: ${res.body || res.status_code}`;
     })
     .catch(e => { status.textContent = "Failed: " + e; });
+});
+
+document.querySelectorAll(".status-select").forEach(sel => {
+  sel.addEventListener("change", () => {
+    const id = sel.dataset.incidentId;
+    const newStatus = sel.value;
+    sel.disabled = true;
+    const fd = new FormData();
+    fd.append("incident_id", id);
+    fd.append("status", newStatus);
+    fetch("/api/incidents/status", {method: "POST", body: fd})
+      .then(r => r.json())
+      .then(res => { sel.disabled = false; if (!res.ok) alert("Failed to save status."); })
+      .catch(() => { sel.disabled = false; alert("Failed to save status."); });
+  });
 });
 </script>
 {% endblock %}

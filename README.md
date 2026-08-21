@@ -115,30 +115,35 @@ are actually one visual product instead of two. The old Streamlit version
 is kept in `legacy/streamlit_dashboard/` and still runs if you want it
 (`pip install streamlit`, then `streamlit run legacy/streamlit_dashboard/app.py`).
 
-Eight pages, split into two groups in the nav. **Threat Monitor**,
-**Incidents**, and **Live Scoring** are the cyber-facing half, the ones
-that are actually about watching and testing traffic. Everything else sits
-under an "Analytics" divider because that's what it is: supporting detail,
-not the point of the app.
+Four items in the nav, because a SOC analyst using this daily shouldn't
+have to think about which of eight tabs has what they need. Model
+internals (metrics tables, SHAP, threshold tuning, feature scatter plots)
+are real and still fully working, they're just not primary navigation
+anymore: they live one click away, behind Settings, under a collapsed
+"Model performance" panel, for whoever actually needs to validate the
+models rather than the people responding to what they flag.
 
 Every page's dataset picker also offers **Combined: DNS + DoS**, which
 merges both trained datasets (tagged with `source_dataset` so you can
 always tell which capture a row came from) instead of making you pick one
-attack surface to watch at a time. Threat Monitor round-robins between the
-two captures so both are visibly live at once, and Incidents/exports can
+attack surface to watch at a time. Dashboard round-robins between the two
+captures so both are visibly live at once, and Incidents/exports can
 filter or include both. Combined view only makes sense on those two pages
-(the Analytics pages compare models on one training run each, and merging
-two different runs' metrics wouldn't mean anything), so picking it
-elsewhere just falls back to the current dataset.
+(comparing models across two separate training runs' metrics wouldn't
+mean anything), so picking it elsewhere just falls back to a real dataset.
 
-- **Threat Monitor**: replays a dataset's packets in timestamp order through a Server-Sent Events stream, scoring each one against the persisted models as it goes. A live feed shows every packet with its verdict, a stat strip tracks packets scanned/attacks flagged/flag rate for the session, and a threat-level pill (NOMINAL/ELEVATED/CRITICAL) escalates based on the rolling flag rate. This is a replay of real recorded captures at a controllable speed, not a live tap on an actual network. See "What this doesn't do yet" below for what real packet capture would take
-- **Incidents**: every packet the selected model flagged, newest first, paginated. Export as CSV for a spreadsheet, or as CEF (Common Event Format) for a SIEM that understands it, which is most of them. There's also a **Forward to SIEM** form that batches incidents as Splunk HTTP Event Collector events and POSTs them to a URL + token you provide, matching Splunk's documented HEC request shape exactly. We haven't tested it against a live Splunk instance (don't have one), but tested the actual HTTP mechanics against a mock endpoint: request goes out, response comes back, errors are caught and reported instead of crashing
-- **Live Scoring**: upload a CSV/JSON of raw packets (same schema as the training data, `label` optional) and it runs through the persisted scaler + all four models. Every row gets flagged attack/normal, and when you've got ground truth, each one is also labeled true/false positive/negative so you can see exactly what the model got wrong. Imports are saved to Postgres, so you can come back later and see what's been tested
-- **Overview**: row counts, attack rate, and the stored test-set metrics/comparison chart for all four models
-- **Explore Data**: feature distributions, an interactive time-series view of traffic with predicted/true anomalies highlighted, and a request-rate vs. inter-arrival-time scatter plot
-- **Model Comparison**: confusion matrices, ROC and Precision-Recall curves, all recomputed live as you move the per-model threshold sliders. Also shows exact false-positive/false-negative counts, not just precision/recall, since those are the numbers that actually matter when you're deciding how sensitive to make this
-- **Feature Importance**: the SHAP bar chart for XGBoost
-- **Settings**: a **Retrain pipeline** control that runs the same pipeline as `run.py` in a background thread and polls for completion, for any dataset (with or without `--tune`/the autoencoder). Training takes roughly 1 to 4 minutes; the page shows a status line while it runs instead of blocking the whole UI thread the way the Streamlit version did. Also shows the current dataset's stats (contamination, split sizes, whether the autoencoder trained)
+- **Dashboard** (`/monitor`): the live feed. Replays a dataset's packets in timestamp order through a Server-Sent Events stream, scoring each one against the persisted models as it goes, plus a total-incidents count and a top-attacking-sources panel above the feed. A stat strip tracks packets scanned/attacks flagged/flag rate for the session, and a threat-level pill (NOMINAL/ELEVATED/CRITICAL) escalates based on the rolling flag rate. This is a replay of real recorded captures at a controllable speed, not a live tap on an actual network. See "What this doesn't do yet" below for what real packet capture would take
+- **Incidents**: every packet the selected model flagged, newest first, paginated, each with a severity tier (Critical/High/Medium/Low, from the model's score) and a **status you can change** (New / Investigating / Resolved / False Positive), persisted in Postgres and keyed to the physical packet, not the model you're currently viewing it through, so triage work doesn't reset when you switch models. Filter by status, export the current filter as CSV or CEF (the SIEM-standard format), or forward as a batch to a Splunk HTTP Event Collector URL + token you provide, matching Splunk's documented HEC request shape exactly. We haven't tested that against a live Splunk instance (don't have one), but tested the actual HTTP mechanics against a mock endpoint: request goes out, response comes back, errors are caught and reported instead of crashing
+- **Scan** (`/live-scoring`): upload a CSV/JSON of raw packets (same schema as the training data, `label` optional) and it runs through the persisted scaler + all four models. Every row gets flagged attack/normal, and when you've got ground truth, each one is also labeled true/false positive/negative so you can see exactly what the model got wrong. Imports are saved to Postgres, so you can come back later and see what's been tested
+- **Settings**: dataset stats, an **Automation** panel with the retrain trigger (see below), and a collapsed **Model performance** panel linking to Overview, Explore Data, Model Comparison, and Feature Importance, unchanged and fully working, just not cluttering the main nav
+
+Retraining runs the same pipeline as `run.py`, in a background thread with
+status polling, for any dataset (with or without `--tune`/the autoencoder).
+Training takes roughly 1 to 4 minutes. Rather than a button someone has to
+remember to click, `POST /api/retrain` (`dataset`/`tune`/`autoencoder` form
+fields) is meant to be hit by a scheduler, a Railway cron service, GitHub
+Actions, whatever a real deployment already uses for scheduled jobs, so
+retraining stays a background job instead of a page someone has to babysit.
 
 ## Data
 
