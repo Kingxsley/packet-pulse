@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sklearn.metrics import f1_score, precision_score, recall_score
@@ -58,7 +58,52 @@ def _validate_dataset(dataset: str) -> str:
 def root():
     available = da.available_datasets()
     default = "dos_clean" if "dos_clean" in available else (available[0] if available else "dos_clean")
-    return RedirectResponse(f"/overview?dataset={default}")
+    return RedirectResponse(f"/monitor?dataset={default}")
+
+
+@app.get("/monitor", response_class=HTMLResponse)
+def monitor(request: Request, dataset: str = "dos_clean"):
+    dataset = _validate_dataset(dataset)
+    ctx = _base_ctx(request, dataset, "monitor")
+    ctx.update(model_order=MODEL_ORDER)
+    return templates.TemplateResponse(request, "monitor.html", ctx)
+
+
+@app.get("/api/monitor-stream")
+async def monitor_stream(request: Request, dataset: str, flag_model: str = "XGBoost", speed: int = 8):
+    import asyncio
+    import json
+
+    dataset = _validate_dataset(dataset)
+    if flag_model not in MODEL_ORDER:
+        flag_model = "XGBoost"
+    df = da.load_results(dataset).sort_values("timestamp").reset_index(drop=True)
+    pc, sc = pred_col(flag_model), score_col(flag_model)
+    interval = 1.0 / max(min(speed, 50), 1)
+    n = len(df)
+
+    async def gen():
+        i = 0
+        while True:
+            if await request.is_disconnected():
+                break
+            row = df.iloc[i % n]
+            payload = {
+                "timestamp": row["timestamp"].isoformat(),
+                "source_ip": row["source_ip"], "dest_ip": row["dest_ip"],
+                "source_port": int(row["source_port"]), "dest_port": int(row["dest_port"]),
+                "protocol": row["protocol"], "packet_length": int(row["packet_length"]),
+                "label": int(row["label"]) if "label" in row and pd.notna(row["label"]) else None,
+                "flagged": int(row[pc]) if pc in row and pd.notna(row[pc]) else None,
+                "score": float(row[sc]) if sc in row and pd.notna(row[sc]) else None,
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
+            i += 1
+            await asyncio.sleep(interval)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive",
+    })
 
 
 @app.get("/overview", response_class=HTMLResponse)

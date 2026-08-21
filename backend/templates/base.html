@@ -19,12 +19,14 @@
       Packet Pulse
     </a>
     <div class="navlinks">
-      <a href="/overview?dataset={{ dataset }}" class="{{ 'active' if active=='overview' }}">Overview</a>
-      <a href="/explore?dataset={{ dataset }}" class="{{ 'active' if active=='explore' }}">Explore Data</a>
-      <a href="/compare?dataset={{ dataset }}" class="{{ 'active' if active=='compare' }}">Model Comparison</a>
-      <a href="/importance?dataset={{ dataset }}" class="{{ 'active' if active=='importance' }}">Feature Importance</a>
+      <a href="/monitor?dataset={{ dataset }}" class="{{ 'active' if active=='monitor' }}">Threat Monitor</a>
       <a href="/live-scoring?dataset={{ dataset }}" class="{{ 'active' if active=='live' }}">Live Scoring</a>
-      <a href="/settings?dataset={{ dataset }}" class="{{ 'active' if active=='settings' }}">Settings</a>
+      <span class="nav-divider">Analytics</span>
+      <a href="/overview?dataset={{ dataset }}" class="navlink-secondary {{ 'active' if active=='overview' }}">Overview</a>
+      <a href="/explore?dataset={{ dataset }}" class="navlink-secondary {{ 'active' if active=='explore' }}">Explore Data</a>
+      <a href="/compare?dataset={{ dataset }}" class="navlink-secondary {{ 'active' if active=='compare' }}">Model Comparison</a>
+      <a href="/importance?dataset={{ dataset }}" class="navlink-secondary {{ 'active' if active=='importance' }}">Feature Importance</a>
+      <a href="/settings?dataset={{ dataset }}" class="navlink-secondary {{ 'active' if active=='settings' }}">Settings</a>
     </div>
     <div class="spacer"></div>
     <span class="live-pill"><span class="live-dot"></span>4 models scoring live</span>

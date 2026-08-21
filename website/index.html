@@ -357,9 +357,9 @@
       <div class="hero-copy">
         <span class="eyebrow">MBIS5015 Capstone · Network Anomaly Detection</span>
         <h1>Know which packet<br>is <em>the attack.</em></h1>
-        <p class="hero-sub">Packet Pulse runs four detection models side by side on real DNS and DoS traffic captures, flags every attack, and shows you exactly which flags were false alarms. No black-box accuracy score to take on faith.</p>
+        <p class="hero-sub">Packet Pulse watches traffic live, packet by packet, and scores it against four detection models in real time, not just a chart of past accuracy. Every flag is labeled true or false so you can see exactly what it caught and what it missed.</p>
         <div class="trust-row">
-          <span class="trust-chip"><span class="dot"></span>419,702 packets scored</span>
+          <span class="trust-chip"><span class="dot"></span>Live threat monitor, not just static charts</span>
           <span class="trust-chip"><span class="dot"></span>4 models, one shared test set</span>
           <span class="trust-chip"><span class="dot"></span>Every false positive labeled</span>
         </div>
@@ -451,9 +451,25 @@
   </section>
 
   <section class="wrap" id="features">
-    <span class="eyebrow">The dashboard</span>
-    <h2>Five ways to see what the models see</h2>
+    <span class="eyebrow">The product</span>
+    <h2>Built around watching traffic, not just scoring datasets</h2>
     <p class="lede">Every feature below is a live page in the shipped app, not a mockup. Launch it yourself from Get Started.</p>
+    <div class="feat-grid reveal-stagger reveal">
+      <div class="feat r-item" style="grid-column: span 2;">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M2 11H6L8.5 4L13 18L15.5 11H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <h4>Threat monitor</h4>
+        <p>The front door of the app: real captured packets replayed through the trained models in near real time, scored packet by packet, with a live feed, a running flag rate, and a threat-level indicator that escalates when the traffic gets hostile. This is what a SOC-facing view of the pipeline looks like, not a chart.</p>
+        <span class="tag">→ <b>Threat Monitor</b> page</span>
+      </div>
+      <div class="feat r-item">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 15V3M11 3L6 8M11 3L16 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 15V17.5C3 18.6 3.9 19.5 5 19.5H17C18.1 19.5 19 18.6 19 17.5V15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <h4>Score anything, instantly</h4>
+        <p>Drop in a CSV or JSON of raw packets and get back a verdict, a confidence score, and, when you have ground truth, a true/false positive/negative breakdown per row.</p>
+        <span class="tag">→ <b>Live Scoring</b> page</span>
+      </div>
+    </div>
+
+    <div class="eyebrow" style="margin-top:40px; margin-bottom:18px;">Supporting analytics</div>
     <div class="feat-grid reveal-stagger reveal">
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 19V13M9 19V6M15 19V10M21 19V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
@@ -478,12 +494,6 @@
         <h4>Explainable by design</h4>
         <p>SHAP feature importance shows exactly which signal drove each XGBoost verdict: packet size, rate, or timing, not just that it fired.</p>
         <span class="tag">→ <b>Feature Importance</b> page</span>
-      </div>
-      <div class="feat r-item">
-        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 15V3M11 3L6 8M11 3L16 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 15V17.5C3 18.6 3.9 19.5 5 19.5H17C18.1 19.5 19 18.6 19 17.5V15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
-        <h4>Score anything, instantly</h4>
-        <p>Drop in a CSV or JSON of raw packets and get back a verdict, a confidence score, and, when you have ground truth, a true/false positive/negative breakdown per row.</p>
-        <span class="tag">→ <b>Live Scoring</b> page</span>
       </div>
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><rect x="12" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="12" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 12V19M12 15.5H19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>

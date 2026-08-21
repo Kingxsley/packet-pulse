@@ -2,9 +2,12 @@
 
 Network traffic anomaly detection for our MBIS5015 capstone, "Anomaly
 Detection in Network Traffic using Machine Learning for Proactive Cyber
-Threat Mitigation." Four models score DNS and DoS packet captures side by
-side, a FastAPI app lets you dig into every prediction and tune detection
-thresholds live, and a landing page ties it together.
+Threat Mitigation." The front door is a live threat monitor: real captured
+packets replayed through four trained models in near real time, scored one
+at a time, with a running feed and a threat level that escalates when
+traffic turns hostile. The metrics, charts, and threshold tuning that used
+to be the whole app are still there, just repositioned as supporting
+analytics behind the thing that's actually supposed to be watching traffic.
 
 - **Live dashboard:** https://dashboard-production-8fac.up.railway.app
 - **Landing page:** https://kingxsley.github.io/packet-pulse/
@@ -111,19 +114,19 @@ are actually one visual product instead of two. The old Streamlit version
 is kept in `legacy/streamlit_dashboard/` and still runs if you want it
 (`pip install streamlit`, then `streamlit run legacy/streamlit_dashboard/app.py`).
 
-Five pages, all sharing one nav:
+Seven pages, split into two groups in the nav. **Threat Monitor** and
+**Live Scoring** are the cyber-facing half, the ones that are actually
+about watching and testing traffic. Everything else sits under an
+"Analytics" divider because that's what it is: supporting detail, not the
+point of the app.
 
+- **Threat Monitor**: replays a dataset's packets in timestamp order through a Server-Sent Events stream, scoring each one against the persisted models as it goes. A live feed shows every packet with its verdict, a stat strip tracks packets scanned/attacks flagged/flag rate for the session, and a threat-level pill (NOMINAL/ELEVATED/CRITICAL) escalates based on the rolling flag rate. This is a replay of real recorded captures at a controllable speed, not a live tap on an actual network. See "What this doesn't do yet" below for what real packet capture would take
+- **Live Scoring**: upload a CSV/JSON of raw packets (same schema as the training data, `label` optional) and it runs through the persisted scaler + all four models. Every row gets flagged attack/normal, and when you've got ground truth, each one is also labeled true/false positive/negative so you can see exactly what the model got wrong. Imports are saved to Postgres, so you can come back later and see what's been tested
 - **Overview**: row counts, attack rate, and the stored test-set metrics/comparison chart for all four models
 - **Explore Data**: feature distributions, an interactive time-series view of traffic with predicted/true anomalies highlighted, and a request-rate vs. inter-arrival-time scatter plot
 - **Model Comparison**: confusion matrices, ROC and Precision-Recall curves, all recomputed live as you move the per-model threshold sliders. Also shows exact false-positive/false-negative counts, not just precision/recall, since those are the numbers that actually matter when you're deciding how sensitive to make this
 - **Feature Importance**: the SHAP bar chart for XGBoost
-- **Live Scoring**: upload a CSV/JSON of raw packets (same schema as the training data, `label` optional) and it runs through the persisted scaler + all four models. Every row gets flagged attack/normal, and when you've got ground truth, each one is also labeled true/false positive/negative so you can see exactly what the model got wrong. Imports are saved to Postgres, so you can come back later and see what's been tested
-
-The Overview page also has a **Retrain pipeline** control that runs the
-same pipeline as `run.py` in a background thread and polls for completion,
-for any dataset (with or without `--tune`/the autoencoder). Training takes
-roughly 1 to 4 minutes; the page shows a status line while it runs instead
-of blocking the whole UI thread the way the Streamlit version did.
+- **Settings**: a **Retrain pipeline** control that runs the same pipeline as `run.py` in a background thread and polls for completion, for any dataset (with or without `--tune`/the autoencoder). Training takes roughly 1 to 4 minutes; the page shows a status line while it runs instead of blocking the whole UI thread the way the Streamlit version did. Also shows the current dataset's stats (contamination, split sizes, whether the autoencoder trained)
 
 ## Data
 

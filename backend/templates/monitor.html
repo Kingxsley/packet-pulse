@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Threat Monitor · Packet Pulse{% endblock %}
+{% block content %}
+<div class="eyebrow">Live network monitor</div>
+<h1 class="page-title">Threat Monitor</h1>
+<p class="page-sub">Replays real captured traffic from <strong>{{ dataset_labels.get(dataset, dataset) }}</strong> through the trained models in near real time, packet by packet. This is a replay of recorded captures, not a live tap on your network. See <a href="/settings?dataset={{ dataset }}">Settings</a> for what a real deployment would need instead.</p>
+
+<div class="panel tick" style="margin-bottom:20px;">
+  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <label class="caption">Flag attacks using
+      <select id="flag-model" class="dataset-select">
+        <option>Isolation Forest</option><option>Autoencoder</option>
+        <option>Random Forest</option><option selected>XGBoost</option>
+      </select>
+    </label>
+    <label class="caption">Speed
+      <select id="speed" class="dataset-select">
+        <option value="3">3/s</option><option value="8" selected>8/s</option>
+        <option value="20">20/s</option><option value="40">40/s</option>
+      </select>
+    </label>
+    <button class="btn btn-primary" id="toggle-btn" type="button">Pause</button>
+    <div class="spacer"></div>
+    <span class="threat-pill threat-low" id="threat-pill"><span class="live-dot"></span>NOMINAL</span>
+  </div>
+</div>
+
+<div class="grid grid-4" style="margin-bottom:20px;">
+  <div class="stat"><div class="num mono" id="stat-scanned">0</div><div class="desc">packets scanned this session</div></div>
+  <div class="stat"><div class="num mono" id="stat-flagged">0</div><div class="desc">attacks flagged</div></div>
+  <div class="stat"><div class="num mono" id="stat-rate">0.0%</div><div class="desc">flag rate (last 50)</div></div>
+  <div class="stat"><div class="num mono" id="stat-elapsed">00:00</div><div class="desc">session time</div></div>
+</div>
+
+<div class="section-title">Live feed</div>
+<div class="panel tick feed-wrap" id="feed-wrap">
+  <table>
+    <thead><tr><th>time</th><th>source</th><th>dest</th><th>proto</th><th>len</th><th>score</th><th>verdict</th></tr></thead>
+    <tbody id="feed-body"></tbody>
+  </table>
+</div>
+
+<script>
+const dataset = {{ dataset|tojson }};
+let es = null;
+let scanned = 0, flagged = 0, startTime = null, recent = [];
+
+function fmtTime(iso) {
+  return iso.split("T")[1].split(".")[0];
+}
+
+function threatLevel(rate) {
+  if (rate < 0.08) return ["threat-low", "NOMINAL"];
+  if (rate < 0.25) return ["threat-med", "ELEVATED"];
+  return ["threat-high", "CRITICAL"];
+}
+
+function tick() {
+  if (!startTime) return;
+  const secs = Math.floor((Date.now() - startTime) / 1000);
+  const m = String(Math.floor(secs / 60)).padStart(2, "0");
+  const s = String(secs % 60).padStart(2, "0");
+  document.getElementById("stat-elapsed").textContent = `${m}:${s}`;
+}
+setInterval(tick, 1000);
+
+function onEvent(e) {
+  const p = JSON.parse(e.data);
+  scanned++;
+  if (p.flagged) flagged++;
+  recent.push(p.flagged ? 1 : 0);
+  if (recent.length > 50) recent.shift();
+  const rate = recent.reduce((a, b) => a + b, 0) / recent.length;
+
+  document.getElementById("stat-scanned").textContent = scanned.toLocaleString();
+  document.getElementById("stat-flagged").textContent = flagged.toLocaleString();
+  document.getElementById("stat-rate").textContent = (rate * 100).toFixed(1) + "%";
+
+  const [cls, label] = threatLevel(rate);
+  const pill = document.getElementById("threat-pill");
+  pill.className = "threat-pill " + cls;
+  pill.innerHTML = `<span class="live-dot"></span>${label}`;
+
+  const tr = document.createElement("tr");
+  if (p.flagged) tr.className = "feed-flash";
+  const verdict = p.flagged
+    ? `<span class="pill pill-fp">FLAGGED</span>`
+    : `<span class="caption">normal</span>`;
+  tr.innerHTML = `
+    <td class="mono">${fmtTime(p.timestamp)}</td>
+    <td class="mono">${p.source_ip}:${p.source_port}</td>
+    <td class="mono">${p.dest_ip}:${p.dest_port}</td>
+    <td>${p.protocol}</td>
+    <td class="mono">${p.packet_length}</td>
+    <td class="mono">${p.score !== null ? p.score.toFixed(3) : "-"}</td>
+    <td>${verdict}</td>`;
+  const body = document.getElementById("feed-body");
+  body.insertBefore(tr, body.firstChild);
+  while (body.children.length > 150) body.removeChild(body.lastChild);
+}
+
+function connect() {
+  const speed = document.getElementById("speed").value;
+  const flagModel = document.getElementById("flag-model").value;
+  const qs = new URLSearchParams({dataset, flag_model: flagModel, speed});
+  es = new EventSource("/api/monitor-stream?" + qs.toString());
+  es.onmessage = onEvent;
+  startTime = startTime || Date.now();
+}
+
+function disconnect() {
+  if (es) { es.close(); es = null; }
+}
+
+document.getElementById("toggle-btn").addEventListener("click", function () {
+  if (es) { disconnect(); this.textContent = "Resume"; }
+  else { connect(); this.textContent = "Pause"; }
+});
+["speed", "flag-model"].forEach(id => {
+  document.getElementById(id).addEventListener("change", () => {
+    if (es) { disconnect(); connect(); }
+  });
+});
+
+connect();
+</script>
+{% endblock %}
