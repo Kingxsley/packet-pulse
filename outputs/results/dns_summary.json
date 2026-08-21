@@ -1,0 +1,17 @@
+{
+  "dataset": "dns",
+  "rows": 306838,
+  "features": [
+    "inter_arrival_time",
+    "request_rate",
+    "packet_rate",
+    "packet_length"
+  ],
+  "attack_rate_train": 0.3732598958963806,
+  "attack_rate_full": 0.3732621122546751,
+  "train_rows": 214786,
+  "test_rows": 92052,
+  "isolation_forest_contamination": 0.3732598958963806,
+  "autoencoder_trained": true,
+  "elapsed_sec": 236.98973679542542
+}

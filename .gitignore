@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Regenerable static charts from the CLI pipeline (large, not used by the
+# Streamlit dashboard, which renders its own plots live). Trained models
+# and per-row results ARE committed so the deployed dashboard works
+# out of the box without needing a training run first.
+outputs/figures/

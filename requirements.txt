@@ -1,0 +1,16 @@
+pandas==3.0.5
+numpy==2.4.6
+scikit-learn==1.9.0
+xgboost==3.2.0
+scipy==1.17.1
+matplotlib==3.11.1
+seaborn==0.13.2
+plotly==6.9.0
+shap==0.51.0
+tensorflow==2.21.0
+joblib==1.5.3
+streamlit==1.62.0
+
+# Optional: only needed if you want to restore the original live InfluxDB
+# Cloud data source instead of the local packet captures in data/raw/.
+# influxdb-client

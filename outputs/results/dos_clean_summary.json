@@ -1,0 +1,17 @@
+{
+  "dataset": "dos_clean",
+  "rows": 112864,
+  "features": [
+    "inter_arrival_time",
+    "request_rate",
+    "packet_rate",
+    "packet_length"
+  ],
+  "attack_rate_train": 0.0012784162827198624,
+  "attack_rate_full": 0.0012847320669123901,
+  "train_rows": 79004,
+  "test_rows": 33860,
+  "isolation_forest_contamination": 0.01,
+  "autoencoder_trained": true,
+  "elapsed_sec": 99.07390069961548
+}

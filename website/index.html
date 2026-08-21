@@ -1,0 +1,606 @@
+<title>Packet Pulse</title>
+<meta name="description" content="Four ML detection models score every packet in real time, flag attacks, and show you every false positive and false negative. No black-box accuracy score to take on faith.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --ink: #0b0e13;
+    --surface: #12161d;
+    --surface-raised: #161b23;
+    --line: #232a35;
+    --line-strong: #3a4452;
+    --fog: #8a94a3;
+    --fog-dim: #5c6472;
+    --paper: #edeff2;
+    --signal: #ffb020;
+    --signal-dim: #8a5c17;
+    --pulse: #3fd0c9;
+    --pulse-dim: #1f6b66;
+    --alert: #e5484d;
+    --alert-dim: #7a2528;
+
+    --font-display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+    --font-body: "Public Sans", -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    background-image:
+      radial-gradient(720px 480px at 14% 0%, rgba(255,176,32,0.10), transparent 60%),
+      radial-gradient(760px 520px at 88% 8%, rgba(63,208,201,0.08), transparent 60%),
+      linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+    background-size: auto, auto, 56px 56px, 56px 56px;
+    background-position: center top;
+    background-attachment: fixed;
+  }
+
+  /* scroll-reveal */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s cubic-bezier(.2,.7,.2,1), transform 0.7s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in-view { opacity: 1; transform: translateY(0); }
+  .reveal-stagger.in-view .r-item { opacity: 1; transform: translateY(0); }
+  .r-item { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .r-item:nth-child(1) { transition-delay: 0.02s; } .r-item:nth-child(2) { transition-delay: 0.09s; }
+  .r-item:nth-child(3) { transition-delay: 0.16s; } .r-item:nth-child(4) { transition-delay: 0.23s; }
+  .r-item:nth-child(5) { transition-delay: 0.30s; } .r-item:nth-child(6) { transition-delay: 0.37s; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal, .r-item { opacity: 1 !important; transform: none !important; }
+  }
+
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; color: var(--paper); }
+  p { margin: 0; }
+  a { color: inherit; }
+
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--signal);
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+  }
+  .eyebrow::before { content: ""; width: 1.4em; height: 1px; background: var(--signal); display: inline-block; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+  section { padding: 96px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+
+  /* ---------- corner-tick blueprint panel motif ---------- */
+  .tick { position: relative; }
+  .tick::before, .tick::after {
+    content: "";
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid var(--line-strong);
+    pointer-events: none;
+  }
+  .tick::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .tick::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+  .tick.tick-signal::before, .tick.tick-signal::after { border-color: var(--signal-dim); }
+
+  /* ---------- nav ---------- */
+  header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(11, 14, 19, 0.86);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 18px 28px; max-width: 1180px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.01em; }
+  .brand svg { flex-shrink: 0; }
+  .navlinks { display: flex; gap: 32px; font-size: 0.92rem; color: var(--fog); }
+  .navlinks a { text-decoration: none; transition: color 0.15s; }
+  .navlinks a:hover, .navlinks a:focus-visible { color: var(--paper); }
+  @media (max-width: 760px) { .navlinks { display: none; } }
+
+  .btn {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    padding: 11px 20px;
+    border-radius: 3px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary {
+    background: linear-gradient(180deg, #ffc350, var(--signal));
+    color: #1a1204;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset, 0 10px 28px -10px rgba(255,176,32,0.65);
+  }
+  .btn-primary:hover, .btn-primary:focus-visible { background: linear-gradient(180deg, #ffd06e, #ffbb3d); box-shadow: 0 1px 0 rgba(255,255,255,0.4) inset, 0 14px 32px -8px rgba(255,176,32,0.8); transform: translateY(-1px); }
+  .btn-ghost { border-color: var(--line-strong); color: var(--paper); background: rgba(255,255,255,0.02); }
+  .btn-ghost:hover, .btn-ghost:focus-visible { border-color: var(--pulse); color: var(--pulse); background: rgba(63,208,201,0.06); transform: translateY(-1px); }
+  a.btn:focus-visible, button:focus-visible { outline: 2px solid var(--pulse); outline-offset: 2px; }
+
+  @keyframes riseIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .hero-copy > * { animation: riseIn 0.7s cubic-bezier(.2,.7,.2,1) both; }
+  .hero-copy .eyebrow { animation-delay: 0.02s; }
+  .hero-copy h1 { animation-delay: 0.08s; }
+  .hero-copy .hero-sub { animation-delay: 0.16s; }
+  .hero-copy .trust-row { animation-delay: 0.24s; }
+  .hero-copy .hero-ctas { animation-delay: 0.32s; }
+  .scope { animation: riseIn 0.8s cubic-bezier(.2,.7,.2,1) 0.28s both; }
+  @media (prefers-reduced-motion: reduce) { .hero-copy > *, .scope { animation: none; } }
+
+  .trust-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 26px 0 36px; }
+  .trust-chip {
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--fog);
+    border: 1px solid var(--line-strong); background: rgba(255,255,255,0.02);
+    padding: 6px 12px; border-radius: 20px; display: inline-flex; align-items: center; gap: 7px;
+  }
+  .trust-chip .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--pulse); }
+
+  /* ---------- hero ---------- */
+  .hero { padding-top: 88px; padding-bottom: 96px; border-bottom: 1px solid var(--line); }
+  .hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center; }
+  @media (max-width: 940px) { .hero-grid { grid-template-columns: 1fr; } }
+
+  .hero h1 { font-size: clamp(2.6rem, 5.4vw, 4.2rem); line-height: 0.96; letter-spacing: -0.01em; margin: 18px 0 22px; }
+  .hero h1 em { font-style: normal; background: linear-gradient(100deg, #ffd37a, var(--signal) 60%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero-sub { font-size: 1.14rem; color: var(--fog); max-width: 46ch; }
+  .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; }
+
+  .scope {
+    background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 20px 22px 16px;
+    box-shadow: 0 30px 70px -30px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02) inset;
+    position: relative;
+  }
+  .scope::before {
+    content: ""; position: absolute; inset: -1px; border-radius: 7px; padding: 1px;
+    background: linear-gradient(160deg, rgba(255,176,32,0.35), transparent 30%, transparent 70%, rgba(63,208,201,0.25));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    pointer-events: none;
+  }
+  .scope-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+  .scope-head .label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; color: var(--fog-dim); text-transform: uppercase; }
+  .scope-head .live { font-family: var(--font-mono); font-size: 0.72rem; color: var(--pulse); display: flex; align-items: center; gap: 6px; }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pulse); animation: blink 1.6s ease-in-out infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  .scope-canvas { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 3px; background: #0d1117; height: 220px; }
+  .scope-canvas svg { display: block; width: 100%; height: 100%; }
+  .scanline {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: linear-gradient(var(--pulse-dim), var(--pulse), var(--pulse-dim));
+    opacity: 0.6;
+    animation: sweep 5s linear infinite;
+  }
+  @keyframes sweep { from { left: 0%; } to { left: 100%; } }
+
+  .anomaly-tag {
+    position: absolute; top: 14px; left: 61%;
+    font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.06em;
+    color: var(--signal); background: rgba(11,14,19,0.88); border: 1px solid var(--signal-dim);
+    padding: 3px 7px; border-radius: 2px; white-space: nowrap;
+  }
+  .readout { display: flex; gap: 22px; margin-top: 14px; font-family: var(--font-mono); font-size: 0.76rem; color: var(--fog); flex-wrap: wrap; }
+  .readout b { color: var(--paper); font-weight: 500; }
+
+  /* ---------- stat strip ---------- */
+  .stats { padding: 56px 0; border-bottom: 1px solid var(--line); }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .stat { background: var(--ink); padding: 26px 24px; border-top: 2px solid var(--pulse-dim); transition: border-color 0.2s, background 0.2s; }
+  .stat:nth-child(odd) { border-top-color: var(--signal-dim); }
+  .stat:hover { background: #0f131a; border-top-color: var(--signal); }
+  .stat:nth-child(even):hover { border-top-color: var(--pulse); }
+  .stat .num { font-family: var(--font-mono); font-size: clamp(1.8rem, 3vw, 2.4rem); font-weight: 600; color: var(--paper); }
+  .stat .num.accent { color: var(--signal); }
+  .stat .desc { color: var(--fog); font-size: 0.88rem; margin-top: 6px; }
+  @media (max-width: 760px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ---------- approach ---------- */
+  .approach-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+  @media (max-width: 760px) { .approach-grid { grid-template-columns: 1fr; } }
+  .approach-grid h3 { font-size: 1.5rem; margin-bottom: 14px; }
+  .approach-grid p { color: var(--fog); }
+  .approach-grid .card-a h3 { color: var(--fog); }
+  .approach-grid .card-b h3 { color: var(--pulse); }
+
+  section > .eyebrow { margin-bottom: 14px; }
+  section > h2 { font-size: clamp(1.8rem, 3vw, 2.5rem); max-width: 22ch; margin-bottom: 14px; }
+  section > .lede { color: var(--fog); max-width: 62ch; font-size: 1.02rem; margin-bottom: 48px; }
+
+  /* ---------- pipeline ---------- */
+  .pipeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .pstep { background: var(--surface); padding: 28px 24px 30px; position: relative; transition: background 0.2s; }
+  .pstep:hover { background: var(--surface-raised); }
+  .pstep::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--signal), transparent); opacity: 0; transition: opacity 0.2s; }
+  .pstep:hover::before { opacity: 1; }
+  .pstep .idx { font-family: var(--font-mono); font-size: 0.85rem; color: var(--signal); margin-bottom: 16px; display: block; }
+  .pstep h4 { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; margin-bottom: 10px; }
+  .pstep p { color: var(--fog); font-size: 0.9rem; }
+  .pstep code { font-family: var(--font-mono); font-size: 0.82rem; color: var(--pulse); background: rgba(63,208,201,0.08); padding: 1px 5px; border-radius: 2px; }
+  @media (max-width: 900px) { .pipeline { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .pipeline { grid-template-columns: 1fr; } }
+
+  /* ---------- features ---------- */
+  .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  @media (max-width: 940px) { .feat-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 620px) { .feat-grid { grid-template-columns: 1fr; } }
+  .feat {
+    background: linear-gradient(165deg, var(--surface-raised), var(--surface));
+    border: 1px solid var(--line);
+    padding: 26px 24px;
+    display: flex; flex-direction: column; gap: 14px;
+    transition: transform 0.22s cubic-bezier(.2,.7,.2,1), border-color 0.22s, box-shadow 0.22s;
+  }
+  .feat:hover {
+    transform: translateY(-4px);
+    border-color: var(--signal-dim);
+    box-shadow: 0 24px 48px -20px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,176,32,0.08);
+  }
+  .feat .icon { color: var(--signal); }
+  .feat h4 { font-family: var(--font-display); font-weight: 600; font-size: 1.22rem; }
+  .feat p { color: var(--fog); font-size: 0.92rem; flex-grow: 1; }
+  .feat .tag { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; color: var(--fog-dim); text-transform: uppercase; }
+  .feat .tag b { color: var(--pulse); font-weight: 500; }
+
+  /* ---------- proof panel ---------- */
+  .proof-panel { background: linear-gradient(165deg, var(--surface-raised), var(--surface)); border: 1px solid var(--line); padding: 40px; box-shadow: 0 40px 80px -40px rgba(0,0,0,0.6); }
+  .proof-top { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; margin-bottom: 32px; }
+  .proof-top p { color: var(--fog); max-width: 56ch; font-size: 0.98rem; }
+  .proof-top .src { font-family: var(--font-mono); font-size: 0.76rem; color: var(--fog-dim); }
+  .cm-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .cm { background: var(--ink); padding: 22px 20px; transition: background 0.2s; }
+  .cm:hover { background: #0f131a; }
+  .cm .n { font-family: var(--font-mono); font-size: 2rem; font-weight: 600; }
+  .cm .l { font-size: 0.86rem; color: var(--paper); margin-top: 6px; font-weight: 500; }
+  .cm .d { font-size: 0.8rem; color: var(--fog-dim); margin-top: 2px; }
+  .cm.tp .n { color: var(--pulse); }
+  .cm.fp .n { color: var(--signal); }
+  .cm.fn .n { color: var(--alert); }
+  .cm.tn .n { color: var(--fog); }
+  .proof-foot { margin-top: 22px; color: var(--fog-dim); font-size: 0.88rem; font-family: var(--font-mono); }
+  .proof-foot a { color: var(--pulse); text-decoration: none; border-bottom: 1px dotted var(--pulse-dim); }
+
+  /* ---------- model table ---------- */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); }
+  table { width: 100%; border-collapse: collapse; min-width: 620px; }
+  thead th {
+    text-align: left; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--fog-dim); font-weight: 500; padding: 14px 20px; border-bottom: 1px solid var(--line-strong); background: var(--surface);
+  }
+  tbody td { padding: 16px 20px; border-bottom: 1px solid var(--line); font-size: 0.94rem; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody .mname { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; }
+  tbody .num { font-family: var(--font-mono); }
+  .pill { font-family: var(--font-mono); font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; letter-spacing: 0.03em; }
+  .pill-unsup { background: rgba(63,208,201,0.12); color: var(--pulse); border: 1px solid var(--pulse-dim); }
+  .pill-sup { background: rgba(255,176,32,0.12); color: var(--signal); border: 1px solid var(--signal-dim); }
+  .tbl-note { margin-top: 16px; color: var(--fog-dim); font-size: 0.84rem; }
+
+  /* ---------- stack strip ---------- */
+  .stack-strip { display: flex; flex-wrap: wrap; gap: 12px; }
+  .stack-badge {
+    font-family: var(--font-mono); font-size: 0.82rem; color: var(--fog); border: 1px solid var(--line-strong);
+    padding: 8px 16px; border-radius: 3px; background: var(--surface);
+  }
+
+  /* ---------- get started ---------- */
+  .gs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  @media (max-width: 860px) { .gs-grid { grid-template-columns: 1fr; } }
+  .gs-copy p { color: var(--fog); margin-bottom: 16px; }
+  .gs-copy .checks { list-style: none; padding: 0; margin: 24px 0 0; display: flex; flex-direction: column; gap: 10px; }
+  .gs-copy .checks li { display: flex; gap: 10px; font-size: 0.94rem; color: var(--paper); }
+  .gs-copy .checks svg { color: var(--pulse); flex-shrink: 0; margin-top: 3px; }
+
+  .term {
+    background: #0d1117; border: 1px solid var(--line); border-radius: 5px; overflow: hidden;
+    box-shadow: 0 30px 70px -30px rgba(0,0,0,0.75), 0 0 0 1px rgba(63,208,201,0.05);
+  }
+  .term-bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .term-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); }
+  .term-title { margin-left: 8px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--fog-dim); }
+  .term-body { padding: 20px 22px; font-family: var(--font-mono); font-size: 0.88rem; line-height: 2; }
+  .term-body .p { color: var(--pulse); }
+  .term-body .c { color: var(--fog-dim); }
+
+  /* ---------- footer ---------- */
+  footer { padding: 56px 0 40px; }
+  .foot-grid { display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+  .foot-brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; margin-bottom: 10px; }
+  footer .tagline { color: var(--fog); font-size: 0.9rem; max-width: 44ch; }
+  .foot-credit { font-family: var(--font-mono); font-size: 0.78rem; color: var(--fog-dim); line-height: 1.9; text-align: right; }
+  @media (max-width: 700px) { .foot-grid { flex-direction: column; } .foot-credit { text-align: left; } }
+  .foot-note { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 0.8rem; color: var(--fog-dim); }
+</style>
+
+<header>
+  <nav class="nav">
+    <a class="brand" href="#top" aria-label="Packet Pulse home">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="0.5" y="0.5" width="25" height="25" rx="3" stroke="#3a4452"/><path d="M3 15L7 15L9.5 8L13 20L15.5 11L17.5 15L23 15" stroke="#ffb020" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Packet Pulse
+    </a>
+    <div class="navlinks">
+      <a href="#features">Product</a>
+      <a href="#pipeline">Pipeline</a>
+      <a href="#models">Models</a>
+      <a href="#proof">Proof</a>
+    </div>
+    <a class="btn btn-primary" href="#get-started">Get started</a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="hero wrap" style="border-left:none;border-right:none;">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow">MBIS5015 Capstone · Network Anomaly Detection</span>
+        <h1>Know which packet<br>is <em>the attack.</em></h1>
+        <p class="hero-sub">Packet Pulse runs four detection models side by side on real DNS and DoS traffic captures, flags every attack, and shows you exactly which flags were false alarms. No black-box accuracy score to take on faith.</p>
+        <div class="trust-row">
+          <span class="trust-chip"><span class="dot"></span>419,702 packets scored</span>
+          <span class="trust-chip"><span class="dot"></span>4 models, one shared test set</span>
+          <span class="trust-chip"><span class="dot"></span>Every false positive labeled</span>
+        </div>
+        <div class="hero-ctas">
+          <a class="btn btn-primary" href="#get-started">Run the live demo →</a>
+          <a class="btn btn-ghost" href="#proof">See a real verdict</a>
+        </div>
+      </div>
+
+      <div class="scope tick tick-signal">
+        <div class="scope-head">
+          <span class="label">Live signal · inter_arrival_time</span>
+          <span class="live"><span class="live-dot"></span>4 models scoring</span>
+        </div>
+        <div class="scope-canvas">
+          <svg viewBox="0 0 520 220" preserveAspectRatio="none">
+            <line x1="0" y1="55" x2="520" y2="55" stroke="#1c222c" stroke-width="1"/>
+            <line x1="0" y1="110" x2="520" y2="110" stroke="#1c222c" stroke-width="1"/>
+            <line x1="0" y1="165" x2="520" y2="165" stroke="#1c222c" stroke-width="1"/>
+            <polyline points="0,150 20,148 40,152 60,149 80,151 100,150 120,148 140,152
+              160,150 180,151 195,80 205,20 215,95 235,149 255,151 275,148 295,150
+              315,152 335,149 355,150 375,148 395,151 415,150 435,149 455,151 475,150 495,148 520,150"
+              fill="none" stroke="#3fd0c9" stroke-width="1.6" stroke-linejoin="round"/>
+            <circle cx="205" cy="20" r="4" fill="#ffb020"/>
+          </svg>
+          <div class="scanline" aria-hidden="true"></div>
+          <span class="anomaly-tag">⚠ anomaly detected · score 0.97</span>
+        </div>
+        <div class="readout">
+          <span>packet_rate <b>1,842/s</b></span>
+          <span>request_rate <b>968</b></span>
+          <span>protocol <b>UDP/53</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="wrap reveal">
+      <div class="stat-grid">
+        <div class="stat"><div class="num accent">419,702</div><div class="desc">packets analyzed across both captures</div></div>
+        <div class="stat"><div class="num">4</div><div class="desc">detection models trained side-by-side</div></div>
+        <div class="stat"><div class="num">0.9999</div><div class="desc">peak F1, tuned classifiers on the DNS capture</div></div>
+        <div class="stat"><div class="num">&lt;4 min</div><div class="desc">end-to-end training, either capture</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap reveal">
+    <span class="eyebrow">Why another detector</span>
+    <div class="approach-grid">
+      <div class="card-a">
+        <h3>Signature rules miss what they've never seen</h3>
+        <p>Traditional detection matches known patterns. A DNS flood or DoS burst that doesn't match a signature sails straight through, and a single anomaly-detection model that <em>does</em> catch it usually can't tell you how many normal packets it flagged along the way.</p>
+      </div>
+      <div class="card-b">
+        <h3>We run four models and show our work</h3>
+        <p>Two unsupervised models (Isolation Forest, Autoencoder) learn what normal traffic looks like with no labels at all. Two supervised models (Random Forest, XGBoost) learn attacks directly. Every one of them is scored on the same held-out packets, and every flag comes with a reason.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="pipeline">
+    <span class="eyebrow">How it works</span>
+    <h2>From raw packet to explained verdict</h2>
+    <p class="lede">One pipeline, four stages, both capture files. No live database dependency: it runs on the packet data sitting in <code class="mono">data/raw/</code>.</p>
+    <div class="pipeline reveal-stagger reveal">
+      <div class="pstep r-item">
+        <span class="idx">01</span>
+        <h4>Ingest</h4>
+        <p>Raw packets load straight from <code>DNSpackets_output.json</code> or <code>Clean_DOS_Capstone.csv</code>: source/dest IP &amp; port, protocol, length, timestamp.</p>
+      </div>
+      <div class="pstep r-item">
+        <span class="idx">02</span>
+        <h4>Engineer</h4>
+        <p>Four signal features per packet: <code>inter_arrival_time</code>, <code>request_rate</code>, <code>packet_rate</code> (rolling 1s window), <code>packet_length</code>.</p>
+      </div>
+      <div class="pstep r-item">
+        <span class="idx">03</span>
+        <h4>Train</h4>
+        <p>Isolation Forest &amp; Autoencoder learn "normal" unsupervised. Random Forest &amp; XGBoost learn attacks directly. One shared held-out test split.</p>
+      </div>
+      <div class="pstep r-item">
+        <span class="idx">04</span>
+        <h4>Score &amp; explain</h4>
+        <p>Every packet gets a verdict, a confidence score, and, for XGBoost, a SHAP breakdown of which feature actually drove the call.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="features">
+    <span class="eyebrow">The dashboard</span>
+    <h2>Five ways to see what the models see</h2>
+    <p class="lede">Every feature below is a live tab in the shipped Streamlit app, not a mockup. Launch it yourself from Get Started.</p>
+    <div class="feat-grid reveal-stagger reveal">
+      <div class="feat r-item">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 19V13M9 19V6M15 19V10M21 19V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <h4>Overview &amp; metrics</h4>
+        <p>Row counts, attack rate, and precision/recall/F1/ROC-AUC for all four models, at a glance, updated the moment a new training run finishes.</p>
+        <span class="tag">→ <b>Overview</b> tab</span>
+      </div>
+      <div class="feat r-item">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="4" cy="17" r="1.8" fill="currentColor"/><circle cx="10" cy="8" r="1.8" fill="currentColor"/><circle cx="16" cy="13" r="1.8" fill="currentColor"/><circle cx="19" cy="5" r="1.8" fill="currentColor"/></svg></span>
+        <h4>Explore the traffic</h4>
+        <p>Interactive time-series and scatter views of every packet, with each model's predicted attacks and the true labels marked side by side.</p>
+        <span class="tag">→ <b>Explore Data</b> tab</span>
+      </div>
+      <div class="feat r-item">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><line x1="2" y1="11" x2="20" y2="11" stroke="currentColor" stroke-width="1.7"/><circle cx="14" cy="11" r="3.4" fill="#0b0e13" stroke="currentColor" stroke-width="1.7"/></svg></span>
+        <h4>Tune the threshold live</h4>
+        <p>Drag a model's operating point and watch its confusion matrix, ROC curve, and false-positive count recompute instantly. No retraining required.</p>
+        <span class="tag">→ <b>Model Comparison</b> tab</span>
+      </div>
+      <div class="feat r-item">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="2.2" fill="currentColor"/><path d="M11 2V6M11 16V20M2 11H6M16 11H20M4.8 4.8L7.5 7.5M14.5 14.5L17.2 17.2M17.2 4.8L14.5 7.5M7.5 14.5L4.8 17.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+        <h4>Explainable by design</h4>
+        <p>SHAP feature importance shows exactly which signal drove each XGBoost verdict: packet size, rate, or timing, not just that it fired.</p>
+        <span class="tag">→ <b>Feature Importance</b> tab</span>
+      </div>
+      <div class="feat r-item">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 15V3M11 3L6 8M11 3L16 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 15V17.5C3 18.6 3.9 19.5 5 19.5H17C18.1 19.5 19 18.6 19 17.5V15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <h4>Score anything, instantly</h4>
+        <p>Drop in a CSV or JSON of raw packets and get back a verdict, a confidence score, and, when you have ground truth, a true/false positive/negative breakdown per row.</p>
+        <span class="tag">→ <b>Live Scoring</b> tab</span>
+      </div>
+      <div class="feat r-item">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><rect x="12" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="12" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 12V19M12 15.5H19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <h4>Every flag, accounted for</h4>
+        <p>Attack/normal isn't a hidden probability. It's a labeled outcome: true positive, false positive, false negative, true negative, colour-coded on every row.</p>
+        <span class="tag">→ all tabs</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="proof">
+    <span class="eyebrow">Proof, not a headline number</span>
+    <h2>Here's exactly what Random Forest got wrong</h2>
+    <div class="proof-panel tick reveal">
+      <div class="proof-top">
+        <p>We pointed Random Forest at 33,860 held-out packets from our hardest capture: a real-world DoS test set where attacks are roughly 1 in 800 packets. This is the unrounded outcome, not a vanity accuracy score.</p>
+        <span class="src mono">SOURCE: outputs/results/dos_clean_metrics.json</span>
+      </div>
+      <div class="cm-grid">
+        <div class="cm tp"><div class="n">41</div><div class="l">True positives</div><div class="d">real attacks caught</div></div>
+        <div class="cm fp"><div class="n">49</div><div class="l">False positives</div><div class="d">normal traffic wrongly flagged</div></div>
+        <div class="cm fn"><div class="n">3</div><div class="l">False negatives</div><div class="d">attacks that slipped through</div></div>
+        <div class="cm tn"><div class="n">33,767</div><div class="l">True negatives</div><div class="d">normal traffic correctly ignored</div></div>
+      </div>
+      <p class="proof-foot">Precision 45.6% · Recall 93.2% · F1 0.612. Recall matters more than precision when the cost of missing an attack is high. <a href="#get-started">Tune that trade-off yourself →</a></p>
+    </div>
+  </section>
+
+  <section class="wrap" id="models">
+    <span class="eyebrow">The roster</span>
+    <h2>Four models, one shared test set</h2>
+    <p class="lede">Best-case scores below are from our balanced DNS capture (37% attack rate, 92,052 held-out packets). See the proof panel above for the harder, realistically imbalanced case.</p>
+    <div class="tbl-wrap reveal">
+      <table>
+        <thead>
+          <tr><th>Model</th><th>Type</th><th>Best F1</th><th>Best ROC-AUC</th><th>Explainability</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mname">Isolation Forest</td><td><span class="pill pill-unsup">Unsupervised</span></td><td class="num">0.583</td><td class="num">0.810</td><td>Distance from partitioned trees</td></tr>
+          <tr><td class="mname">Autoencoder</td><td><span class="pill pill-unsup">Unsupervised</span></td><td class="num">0.660</td><td class="num">0.792</td><td>Reconstruction error</td></tr>
+          <tr><td class="mname">Random Forest</td><td><span class="pill pill-sup">Supervised</span></td><td class="num">0.9999</td><td class="num">1.000</td><td>Built-in feature importances</td></tr>
+          <tr><td class="mname">XGBoost</td><td><span class="pill pill-sup">Supervised</span></td><td class="num">0.9999</td><td class="num">1.000</td><td>Per-prediction SHAP values</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tbl-note">Near-perfect DNS scores reflect packet size being a strong, simulated signal in that capture. Treat them as an upper bound, not a promise. The threshold sliders and proof panel exist so you can judge each model on your own traffic, not ours.</p>
+  </section>
+
+  <section class="wrap">
+    <span class="eyebrow">Under the hood</span>
+    <div class="stack-strip reveal">
+      <span class="stack-badge">Python 3.11</span>
+      <span class="stack-badge">scikit-learn</span>
+      <span class="stack-badge">XGBoost</span>
+      <span class="stack-badge">TensorFlow / Keras</span>
+      <span class="stack-badge">SHAP</span>
+      <span class="stack-badge">Streamlit</span>
+      <span class="stack-badge">Plotly</span>
+    </div>
+  </section>
+
+  <section class="wrap" id="get-started">
+    <span class="eyebrow">Get started</span>
+    <h2>Runs on your machine. No sign-up.</h2>
+    <div class="gs-grid reveal">
+      <div class="gs-copy">
+        <p>Packet Pulse is self-hosted: the model, the data, and the dashboard all run locally. Nothing leaves your machine, and there's no account to create.</p>
+        <ul class="checks">
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Both capture datasets included, already trained</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Retrain from the sidebar after adding your own captures</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Score any CSV/JSON packet batch from the Live Scoring tab</li>
+        </ul>
+      </div>
+      <div class="term tick">
+        <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-title">bash · anomaly_detection_project</span></div>
+        <div class="term-body">
+          <div><span class="p">$</span> cd anomaly_detection_project</div>
+          <div><span class="p">$</span> .venv/Scripts/activate</div>
+          <div><span class="p">$</span> pip install -r requirements.txt</div>
+          <div><span class="p">$</span> streamlit run dashboard/app.py</div>
+          <div class="c">→ open http://localhost:8501</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <div class="foot-grid">
+    <div>
+      <div class="foot-brand">
+        <svg width="22" height="22" viewBox="0 0 26 26" fill="none"><rect x="0.5" y="0.5" width="25" height="25" rx="3" stroke="#3a4452"/><path d="M3 15L7 15L9.5 8L13 20L15.5 11L17.5 15L23 15" stroke="#ffb020" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Packet Pulse
+      </div>
+      <p class="tagline">Anomaly detection in network traffic, built for the MBIS5015 capstone: "Proactive Cyber Threat Mitigation."</p>
+    </div>
+    <div class="foot-credit">
+      Kingsley Ihesiene · Yakub Jafar Aliu<br>
+      Umekulsum Indori · Ravina Vijay Gorasva<br>
+      Viola Chepngetich Birech · Sutinan Thanombun
+    </div>
+  </div>
+  <p class="foot-note">Built on simulated capture data for an academic capstone project, not a production security product.</p>
+</footer>
+
+<script>
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.classList.add("in-view");
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -60px 0px" });
+    document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+  } else {
+    document.querySelectorAll(".reveal").forEach((el) => el.classList.add("in-view"));
+  }
+</script>
