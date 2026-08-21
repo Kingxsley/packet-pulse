@@ -10,6 +10,7 @@ shap==0.51.0
 tensorflow==2.21.0
 joblib==1.5.3
 streamlit==1.62.0
+psycopg2-binary==2.9.10
 
 # Optional: only needed if you want to restore the original live InfluxDB
 # Cloud data source instead of the local packet captures in data/raw/.

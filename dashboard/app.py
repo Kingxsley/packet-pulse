@@ -1,12 +1,13 @@
-"""Streamlit dashboard for the network traffic anomaly detection engine.
+"""Packet Pulse dashboard: the network traffic anomaly detection engine.
 
 Reads the artifacts produced by `run.py` (outputs/results, outputs/models)
 and presents them interactively: metrics, live-adjustable detection
 thresholds, ROC/PR curves, SHAP feature importance, and a live-scoring tab
 that runs uploaded packet data through the persisted models.
 
-Run with:
-    streamlit run dashboard/app.py
+Built and originally run locally with Streamlit (`streamlit run dashboard/app.py`);
+it now deploys straight from GitHub to Railway on every push, with Postgres
+persisting anything imported through Live Scoring.
 """
 import sys
 from pathlib import Path
@@ -24,6 +25,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import data_access as da  # noqa: E402
+import db  # noqa: E402
+import theme  # noqa: E402
 from src import config  # noqa: E402
 from src.features import engineer_features  # noqa: E402
 
@@ -33,10 +36,11 @@ DATASET_LABELS = {
     "dos_clean": "DoS capture, cleaned (112k rows)",
 }
 MODEL_ORDER = ["Isolation Forest", "Autoencoder", "Random Forest", "XGBoost"]
-MODEL_COLORS = {"Isolation Forest": "#f0a202", "Autoencoder": "#7b2cbf",
-                 "Random Forest": "#1f77b4", "XGBoost": "#06a77d"}
+MODEL_COLORS = {"Isolation Forest": "#ffb020", "Autoencoder": "#e5484d",
+                 "Random Forest": "#3fd0c9", "XGBoost": "#5b8def"}
 
-st.set_page_config(page_title="Network Anomaly Detection", layout="wide", page_icon="🛰️")
+st.set_page_config(page_title="Packet Pulse", layout="wide", page_icon="📡")
+theme.inject()
 
 
 # --------------------------------------------------------------------------
@@ -126,7 +130,7 @@ OUTCOME_STYLE = {
 
 
 def outcomes(y_true, y_pred) -> pd.Series:
-    """Per-row TP/FP/FN/TN label -- attack vs. normal is `y_pred`; correctness
+    """Per-row TP/FP/FN/TN label. Attack vs. normal is `y_pred`; correctness
     against the ground truth is what distinguishes true/false positive/negative."""
     return pd.Series(
         [OUTCOME_LABELS[(int(t), int(p))] for t, p in zip(y_true, y_pred)],
@@ -302,17 +306,29 @@ def tab_live_scoring(dataset, raw_df, thresholds):
                "uploaded batch's own scores, so it's most meaningful on batches "
                "of at least a few dozen packets rather than single rows.")
 
+    if db.enabled():
+        with st.expander("Import history (Postgres)", expanded=False):
+            history = db.list_imports()
+            if history.empty:
+                st.caption("No imports yet. Score something below and it'll show up here.")
+            else:
+                st.dataframe(history, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Import history is off (no DATABASE_URL set): imports won't persist across restarts.")
+
     demo = st.button("Try it with a random sample from this dataset")
     uploaded = st.file_uploader("Upload packets", type=["csv", "json"])
 
-    input_df = None
+    input_df, source_label = None, None
     if demo:
         cols = LIVE_REQUIRED_COLS + (["label"] if "label" in raw_df else [])
         input_df = raw_df[cols].sample(min(300, len(raw_df)), random_state=None).reset_index(drop=True)
+        source_label = "Random sample"
     elif uploaded is not None:
         try:
             input_df = (pd.read_json(uploaded) if uploaded.name.endswith(".json")
                         else pd.read_csv(uploaded))
+            source_label = uploaded.name
         except Exception as e:
             st.error(f"Could not parse file: {e}")
             return
@@ -382,6 +398,7 @@ def tab_live_scoring(dataset, raw_df, thresholds):
     else:
         st.dataframe(view, use_container_width=True, height=350)
 
+    metrics_for_db = None
     if "label" in scored:
         rows = []
         for model in MODEL_ORDER:
@@ -393,8 +410,13 @@ def tab_live_scoring(dataset, raw_df, thresholds):
                     "recall": recall_score(scored["label"], scored[pc], zero_division=0),
                     "f1": f1_score(scored["label"], scored[pc], zero_division=0),
                 })
-        st.caption("Sample included ground-truth labels -- quick accuracy check across all four models:")
+        st.caption("Sample included ground-truth labels: quick accuracy check across all four models.")
         st.dataframe(pd.DataFrame(rows).set_index("model").style.format("{:.4f}"), use_container_width=True)
+        metrics_for_db = {r["model"]: {k: v for k, v in r.items() if k != "model"} for r in rows}
+
+    if db.enabled() and flag_pc in scored:
+        import_id = db.save_import(dataset, source_label, flag_model, scored, flag_pc, metrics_for_db)
+        st.caption(f"Saved to Postgres as import #{import_id}. Check the history panel above next time.")
 
     st.download_button("Download scored data as CSV", scored.to_csv(index=False),
                         file_name=f"{dataset}_scored.csv", mime="text/csv")
@@ -405,9 +427,11 @@ def main():
     dataset, thresholds = sidebar()
     df = da.load_results(dataset)
 
-    st.title("Network Traffic Anomaly Detection")
-    st.caption(f"MBIS5015 capstone -- Isolation Forest, Autoencoder, Random Forest & XGBoost "
-               f"on **{DATASET_LABELS.get(dataset, dataset)}**")
+    theme.header()
+    st.markdown('<div class="pp-eyebrow">MBIS5015 Capstone · Network Anomaly Detection</div>',
+                unsafe_allow_html=True)
+    st.caption(f"Isolation Forest, Autoencoder, Random Forest & XGBoost, all scoring "
+               f"**{DATASET_LABELS.get(dataset, dataset)}** side by side.")
 
     overview, explore, compare, importance, live = st.tabs(
         ["Overview", "Explore Data", "Model Comparison", "Feature Importance", "Live Scoring"]

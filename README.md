@@ -1,63 +1,76 @@
-# Network Traffic Anomaly Detection
+# Packet Pulse
 
-Rebuilt, working version of the MBIS5015 capstone prototype **"Anomaly
+Network traffic anomaly detection for our MBIS5015 capstone, "Anomaly
 Detection in Network Traffic using Machine Learning for Proactive Cyber
-Threat Mitigation."** The original deliverable was a single 339-line script
-(`legacy/original_script.py`) that could not run against the data shipped
-alongside it and depended on a live cloud database with a hardcoded API
-token. This project restructures it into a runnable pipeline over the local
-packet captures, and fixes the bugs described below.
+Threat Mitigation." Four models score DNS and DoS packet captures side by
+side, a Streamlit dashboard lets you dig into every prediction and tune
+detection thresholds live, and a landing page ties it together.
 
+- **Live dashboard:** https://dashboard-production-8fac.up.railway.app
+- **Landing page:** https://kingxsley.github.io/packet-pulse/
+- **Repo:** https://github.com/Kingxsley/packet-pulse
 
-## What it does
+Deploys straight from this repo to Railway on every push. Postgres sits
+next to it so anything imported through Live Scoring sticks around instead
+of disappearing when the tab closes.
 
-Detects malicious traffic (DNS floods / DoS) in packet-capture data using
-four models trained side-by-side:
+## What's in here
 
-- **Isolation Forest** (unsupervised)
-- **Autoencoder** (unsupervised, Keras/TensorFlow)
-- **Random Forest** (supervised)
-- **XGBoost** (supervised, with SHAP feature-importance explanation)
+- **Isolation Forest** and **Autoencoder** (unsupervised) learn what normal
+  traffic looks like without labels
+- **Random Forest** and **XGBoost** (supervised) learn the attacks directly,
+  with SHAP explaining every XGBoost call
+- A **dashboard** with live threshold tuning, per-row true/false
+  positive/negative labeling, and a Live Scoring tab anyone can drop a
+  dataset into
+- A **landing page** with the real numbers from the last training run, not
+  placeholder copy
 
 ## Project structure
 
 ```
 anomaly_detection_project/
-├── run.py                  # CLI entry point
+├── run.py                  # CLI entry point for the training pipeline
 ├── requirements.txt
+├── Procfile                 # Railway start command
 ├── src/
-│   ├── config.py           # paths, feature list, hyperparameters
-│   ├── data_loader.py      # loads the local JSON/CSV packet captures
-│   ├── features.py         # feature engineering
-│   ├── models.py           # model training (Isolation Forest, Autoencoder, RF, XGBoost)
-│   ├── evaluate.py         # metrics, confusion matrix, SHAP
-│   ├── visualize.py        # saves figures to outputs/figures
-│   └── pipeline.py         # orchestrates one end-to-end run
+│   ├── config.py            # paths, feature list, hyperparameters
+│   ├── data_loader.py       # loads the local JSON/CSV packet captures
+│   ├── features.py          # feature engineering
+│   ├── models.py            # model training (Isolation Forest, Autoencoder, RF, XGBoost)
+│   ├── evaluate.py          # metrics, confusion matrix, SHAP
+│   ├── visualize.py         # saves figures to outputs/figures
+│   └── pipeline.py          # orchestrates one end-to-end run
 ├── dashboard/
-│   ├── app.py               # Streamlit dashboard
-│   └── data_access.py       # cached loaders for results/models
-├── data/raw/                # DNSpackets_output.json, DOSpackets_output.json, Clean_DOS_Capstone.csv
+│   ├── app.py                # Streamlit dashboard
+│   ├── data_access.py        # cached loaders for results/models
+│   ├── db.py                 # Postgres persistence for Live Scoring imports
+│   └── theme.py               # shared brand styling
+├── data/raw/                 # DNSpackets_output.json, DOSpackets_output.json, Clean_DOS_Capstone.csv
 ├── outputs/
-│   ├── figures/             # PNG/HTML charts per run
-│   ├── results/             # per-row predictions (CSV) + metrics/summary/SHAP (JSON)
-│   └── models/              # trained model + scaler artifacts (joblib / .keras)
-└── legacy/original_script.py  # the original script, kept for reference (token redacted)
+│   ├── figures/               # PNG/HTML charts per run
+│   ├── results/                # per-row predictions (CSV) + metrics/summary/SHAP (JSON)
+│   └── models/                 # trained model + scaler artifacts (joblib / .keras)
+├── website/index.html          # landing page source
+├── docs/index.html             # copy of the landing page GitHub Pages serves
+└── legacy/original_script.py   # our first prototype script, kept for reference
 ```
 
 ## Setup
 
 ```bash
-cd anomaly_detection_project
+git clone https://github.com/Kingxsley/packet-pulse
+cd packet-pulse
 python -m venv .venv
 .venv/Scripts/activate       # Windows
 pip install -r requirements.txt
 ```
 
-This was built and tested with **Python 3.11** (TensorFlow does not yet
-publish wheels for very new Python releases such as 3.14, so avoid the
-newest interpreter on your machine if you have multiple installed).
+We built and tested this on **Python 3.11** (TensorFlow doesn't publish
+wheels for very new Python releases yet, so if you've got 3.13/3.14 on your
+machine too, use 3.11 for this project).
 
-## Usage
+## Running the pipeline
 
 ```bash
 python run.py --dataset dos_clean      # fast, recommended default (112k rows)
@@ -68,44 +81,40 @@ python run.py --dataset dns --no-autoencoder      # skip TensorFlow if not insta
 ```
 
 Each run prints per-model test-set metrics and writes:
-- `outputs/results/<dataset>_anomaly_results.csv` — every row with each model's prediction, anomaly score, train/test split assignment, and the ground-truth label
-- `outputs/results/<dataset>_metrics.json` — precision/recall/F1/ROC-AUC per model
-- `outputs/results/<dataset>_summary.json` — row counts, attack rate, split sizes, training time
-- `outputs/results/<dataset>_shap_importance.json` — mean |SHAP value| per feature (XGBoost)
-- `outputs/figures/` — feature distributions, confusion matrices, ROC/PR curves, an interactive time-series plot and scatter plot
-- `outputs/models/` — the fitted scaler and all four trained models, so a serving layer can load them directly
+- `outputs/results/<dataset>_anomaly_results.csv`: every row with each model's prediction, anomaly score, train/test split assignment, and the ground-truth label
+- `outputs/results/<dataset>_metrics.json`: precision/recall/F1/ROC-AUC per model
+- `outputs/results/<dataset>_summary.json`: row counts, attack rate, split sizes, training time
+- `outputs/results/<dataset>_shap_importance.json`: mean |SHAP value| per feature (XGBoost)
+- `outputs/figures/`: feature distributions, confusion matrices, ROC/PR curves, an interactive time-series plot and scatter plot
+- `outputs/models/`: the fitted scaler and all four trained models
 
 ## Dashboard
-
-A Streamlit dashboard (the charter's "Interactive Dashboard" deliverable)
-sits on top of whatever `run.py` has produced so far — run the pipeline
-for at least one dataset first, then:
 
 ```bash
 streamlit run dashboard/app.py
 ```
 
-Open http://localhost:8501. It has five tabs:
+That's the command we originally ran locally while building this. The
+version at the live link above is the same app, just deployed to Railway so
+we're not the only ones who can open it. Five tabs:
 
-- **Overview** — row counts, attack rate, and the stored test-set metrics/comparison chart for all four models.
-- **Explore Data** — feature distributions, an interactive time-series view of traffic with predicted/true anomalies highlighted, and a request-rate vs. inter-arrival-time scatter plot.
-- **Model Comparison** — confusion matrices, ROC and Precision-Recall curves, all **recomputed live** as you move the per-model threshold sliders in the sidebar (probability threshold for Random Forest/XGBoost, "% flagged" sensitivity for Isolation Forest/Autoencoder) — this is the tool for exploring the precision/recall tradeoff flagged as a limitation in the CLI results.
-- **Feature Importance** — the SHAP bar chart for XGBoost.
-- **Live Scoring** — upload a CSV/JSON of raw packets (same schema as the training data, `label` optional) and it's run through the persisted scaler + all four models to produce anomaly flags, with a one-click "try it with a random sample from this dataset" option if you don't have a file handy, and a CSV download of the scored output.
+- **Overview**: row counts, attack rate, and the stored test-set metrics/comparison chart for all four models
+- **Explore Data**: feature distributions, an interactive time-series view of traffic with predicted/true anomalies highlighted, and a request-rate vs. inter-arrival-time scatter plot
+- **Model Comparison**: confusion matrices, ROC and Precision-Recall curves, all recomputed live as you move the per-model threshold sliders in the sidebar. Also shows exact false-positive/false-negative counts, not just precision/recall, since those are the numbers that actually matter when you're deciding how sensitive to make this
+- **Feature Importance**: the SHAP bar chart for XGBoost
+- **Live Scoring**: upload a CSV/JSON of raw packets (same schema as the training data, `label` optional) and it runs through the persisted scaler + all four models. Every row gets flagged attack/normal, and when you've got ground truth, each one is also labeled true/false positive/negative so you can see exactly what the model got wrong. Imports are saved to Postgres, so you can come back later and see what's been tested
 
-The sidebar also has a **Retrain pipeline** control that calls the same
-`src/pipeline.run()` used by `run.py` directly from the UI (any dataset,
-with or without `--tune`/the autoencoder) — useful after adding new data to
-`data/raw/` without leaving the browser. It blocks the UI for the duration
-of training (~1–3 minutes), which is acceptable for this batch-retraining
-use case but is not the same thing as the charter's real-time streaming
-pipeline (see "Not (yet) implemented" below).
+The sidebar also has a **Retrain pipeline** control that runs the same
+pipeline as `run.py`, straight from the browser, for any dataset (with or
+without `--tune`/the autoencoder). It blocks the UI while training runs
+(roughly 1 to 4 minutes), which is fine for a demo but isn't a background
+job queue.
 
 ## Data
 
-Three packet captures were provided, all sharing the same schema
-(`source_ip, dest_ip, source_port, dest_port, protocol, packet_length,
-timestamp, inter_arrival_time, label`):
+Three packet captures, all sharing the same schema (`source_ip, dest_ip,
+source_port, dest_port, protocol, packet_length, timestamp,
+inter_arrival_time, label`):
 
 | dataset | file | rows | attack rate |
 |---|---|---|---|
@@ -113,58 +122,11 @@ timestamp, inter_arrival_time, label`):
 | `dos` | `DOSpackets_output.json` | 112,865 | ~0.1% |
 | `dos_clean` | `Clean_DOS_Capstone.csv` | 112,864 | ~0.1% (deduplicated/cleaned export of `dos`) |
 
-## Fixes made vs. the original script
-
-1. **Leaked credential.** The original hardcoded an InfluxDB Cloud API token
-   in source. Removed entirely — the pipeline now runs fully offline against
-   the local packet captures instead of requiring cloud access.
-2. **Crashing column check.** The original required a `dns_rate` column that
-   doesn't exist anywhere in the data you provided (it was an InfluxDB-only
-   pre-aggregated field) — running it against these files raised
-   `ValueError: Missing columns: ['dns_rate']` immediately. `dns_rate` was
-   also never actually used in the model's `features` list, so the check was
-   dead code checking the wrong thing. Replaced with a `packet_rate` feature
-   computed directly from packet timestamps (rolling 1-second packet count).
-3. **Inconsistent clipping.** `inter_arrival_time` was only floored when
-   `.le(0).any()` happened to be true for the whole column; a single bad row
-   shouldn't gate whether the fix applies at all. Now applied unconditionally.
-4. **Unfair unsupervised evaluation.** Isolation Forest and the Autoencoder
-   were fit on the *entire* dataset (train + test combined) with no held-out
-   split, while Random Forest/XGBoost got a proper train/test split — an
-   apples-to-oranges comparison that also let unsupervised metrics leak test
-   rows into fitting. All four models now share one train-fit scaler and are
-   evaluated identically on the same held-out test split.
-5. **Impractical grid search.** `GridSearchCV` with a 16-combination grid ×
-   5-fold CV ran unconditionally for both Random Forest and XGBoost, which is
-   very slow on a 300k-row dataset. Tuning is now opt-in via `--tune`
-   (`RandomizedSearchCV`, 3-fold, 8 iterations); a single reasonable default
-   hyperparameter set is used otherwise so a full run finishes in ~2 minutes.
-6. **Fragile SHAP handling.** `explainer.shap_values(X)` was assumed to
-   always return one 2D array; depending on the installed `shap`/`xgboost`
-   versions it can instead return a list or an `Explanation` object, breaking
-   `pd.DataFrame(shap_values, ...)`. `evaluate.shap_feature_importance` now
-   normalizes all three shapes. SHAP is also capped at a 5,000-row sample on
-   large datasets to keep runtime bounded.
-7. **Blocking plots.** Every chart called `plt.show()` / `fig.show()`, which
-   hangs indefinitely outside an interactive notebook. All figures are now
-   saved to `outputs/figures/` instead.
-8. **Fixed contamination.** Isolation Forest's `contamination=0.3` was a
-   constant unrelated to the actual attack rate in the data (0.1%–37%
-   depending on dataset). It's now derived from the training split's label
-   prevalence (clamped to `[0.01, 0.5]`), while still not using labels to fit
-   the model itself.
-9. **No persisted artifacts.** The original discarded every trained model
-   after the script exited. Trained models and the fitted scaler are now
-   saved under `outputs/models/` (`joblib` for Isolation Forest/RF/XGBoost,
-   Keras format for the autoencoder), so they can be loaded by a serving
-   layer without retraining — a step toward the charter's "Model Serving"
-   deliverable.
-
 ## Results
 
 Test-set metrics from a full run of both datasets (defaults, no `--tune`):
 
-**`dos_clean`** (112,864 rows, ~0.1% attacks — extreme class imbalance):
+**`dos_clean`** (112,864 rows, ~0.1% attacks, extreme class imbalance):
 
 | model | precision | recall | F1 | ROC-AUC |
 |---|---|---|---|---|
@@ -182,32 +144,78 @@ Test-set metrics from a full run of both datasets (defaults, no `--tune`):
 | Random Forest | 0.9999 | 1.000 | 0.9999 | 1.000 |
 | XGBoost | 0.9999 | 1.000 | 0.9999 | 1.000 |
 
-**Observations / caveats:**
-- On `dos_clean`, XGBoost/Isolation Forest/Autoencoder all show high recall
-  but low precision — with only ~145 attack rows out of 112k, even a very
-  good model produces many false positives at the default 0.5 probability
-  threshold. If you need higher precision for this dataset, raise the
-  classification threshold above 0.5 using `predict_proba` on the saved
-  model rather than the default `.predict()`.
-- The near-perfect scores on `dns` are not a bug, but worth treating with
-  suspicion for a real deployment: SHAP shows `packet_length` alone accounts
-  for the overwhelming majority of the XGBoost model's decisions on this
-  dataset (`request_rate`/`inter_arrival_time` contribute almost nothing).
-  This means the simulated DNS attack traffic in this capture is trivially
-  separable by packet size — consistent with the Project Charter's own
-  caveat that "testing is restricted to simulated data (not real enterprise
-  traffic)." Treat these numbers as an upper bound, not evidence the model
-  will generalize to real-world DNS attacks that don't have such a
-  distinctive packet size.
+A couple of things worth knowing before you trust these numbers:
 
-## Not (yet) implemented
+- On `dos_clean`, recall stays high but precision drops hard at the default
+  0.5 threshold, because there are only ~145 attack rows out of 112k. Use
+  the Model Comparison tab's sliders to see the actual tradeoff instead of
+  reading one row off this table.
+- The near-perfect `dns` scores aren't a bug, but we wouldn't ship them
+  without a second look: SHAP shows `packet_length` alone drives almost all
+  of the XGBoost decisions on this capture, meaning the simulated attack
+  traffic here is trivially separable by packet size. That's a property of
+  how the capture was generated, not proof the model would catch a real
+  DNS flood that doesn't have such an obvious size signature. Treat these
+  as an upper bound.
 
-The Project Charter also scopes a **FastAPI backend** ("to fetch anomaly
-data") and **containerized deployment**. The Streamlit dashboard above reads
-the pipeline's output files and loaded models directly rather than going
-through an API layer, and the "Retrain pipeline" control runs training
-synchronously in-process rather than as a background job — both reasonable
-simplifications for a single-user local dashboard, but a FastAPI service in
-front of `outputs/` and `src/pipeline.py` would be the natural next step if
-this needs to serve multiple dashboard clients or a real ingestion pipeline.
-Docker packaging for the app + dashboard is also not set up yet.
+## What this doesn't do yet, and how a company would actually use it
+
+There's no InfluxDB, no live traffic feed, no streaming anything. This
+scores whatever data you hand it, either the packet captures baked into the
+repo or a file you upload through Live Scoring. It isn't watching real
+network traffic right now.
+
+Our original prototype tried to pull data live from an InfluxDB Cloud
+bucket. We dropped that (see `legacy/original_script.py` for what it used
+to look like) because it meant every run depended on a specific cloud
+account being online, and honestly, we didn't have real traffic flowing
+into it either, just recorded captures. Scoring the captures directly, in a
+pipeline we actually understand end to end, got us a working system instead
+of a half-connected one.
+
+If a company wanted to run this for real, the missing piece is an ingestion
+layer between "packets hitting the network" and our `engineer_features`
+step: something like a packet capture agent or a network tap feeding a
+queue (Kafka, or yes, back to something like InfluxDB) that this pipeline
+polls or subscribes to, scoring each record as it arrives instead of in a
+batch. The four models and the feature engineering wouldn't need to
+change, they're already fast enough for that. What would need to change:
+
+- A real ingestion source instead of static files
+- Flagged attacks pushing to something a human sees fast (Slack, PagerDuty,
+  email) instead of sitting in a dashboard tab waiting to be opened
+- Multi-user auth, since right now anyone with the URL can see everyone
+  else's imports
+- A background job queue for retraining, instead of blocking the UI thread
+
+The Postgres database we just added is a step in that direction. It's the
+first piece of this system that's a real database instead of files on
+disk, and it's what an alerting pipeline would build on top of.
+
+## What we fixed from the original script
+
+The first version of this (`legacy/original_script.py`) was a single
+script that pulled from InfluxDB and had a live API token committed
+straight into it. It also didn't actually run against the packet captures
+we ended up using: it required a `dns_rate` column that only existed in
+the InfluxDB schema, not in any file we had. A few other things we caught
+along the way:
+
+- Isolation Forest and the Autoencoder were being fit and evaluated on the
+  same rows, no held-out split, while Random Forest and XGBoost got a
+  proper train/test split. Not a fair comparison. All four now share one
+  split.
+- `GridSearchCV` ran an unconditional 16-combination search over 5 folds
+  for both Random Forest and XGBoost, which crawls on 300k rows. Tuning is
+  opt-in now via `--tune`.
+- `shap_values()` output shape depends on the installed shap/xgboost
+  version and the original code assumed one specific shape. We normalize
+  all three shapes it can actually return.
+- Every chart called `plt.show()`, which just hangs outside a notebook.
+  Figures save to `outputs/figures/` instead.
+- Isolation Forest's contamination was a hardcoded 0.3 regardless of the
+  actual attack rate (0.1% to 37% depending on dataset). It's derived from
+  the training split now.
+- Nothing got saved. Trained models are persisted under `outputs/models/`
+  so they can be loaded without retraining, which is also what makes Live
+  Scoring possible.
