@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Packet Pulse{% endblock %}</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<header>
+  <nav class="nav">
+    <a class="brand" href="/">
+      <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><rect x="0.5" y="0.5" width="25" height="25" rx="3" stroke="#3a4452"/><path d="M3 15L7 15L9.5 8L13 20L15.5 11L17.5 15L23 15" stroke="#ffb020" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Packet Pulse
+    </a>
+    <div class="navlinks">
+      <a href="/overview?dataset={{ dataset }}" class="{{ 'active' if active=='overview' }}">Overview</a>
+      <a href="/explore?dataset={{ dataset }}" class="{{ 'active' if active=='explore' }}">Explore Data</a>
+      <a href="/compare?dataset={{ dataset }}" class="{{ 'active' if active=='compare' }}">Model Comparison</a>
+      <a href="/importance?dataset={{ dataset }}" class="{{ 'active' if active=='importance' }}">Feature Importance</a>
+      <a href="/live-scoring?dataset={{ dataset }}" class="{{ 'active' if active=='live' }}">Live Scoring</a>
+    </div>
+    <div class="spacer"></div>
+    <span class="live-pill"><span class="live-dot"></span>4 models scoring live</span>
+    <select class="dataset-select" onchange="location.href='{{ base_path }}?dataset='+this.value">
+      {% for d in datasets %}
+      <option value="{{ d }}" {{ 'selected' if d==dataset }}>{{ dataset_labels.get(d, d) }}</option>
+      {% endfor %}
+    </select>
+  </nav>
+</header>
+<main class="wrap">
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

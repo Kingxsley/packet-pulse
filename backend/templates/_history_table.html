@@ -1,0 +1,19 @@
+{% if history %}
+<table>
+  <thead><tr><th>id</th><th>when</th><th>source</th><th>flagged with</th><th>rows</th><th>flagged</th></tr></thead>
+  <tbody>
+    {% for row in history %}
+    <tr>
+      <td class="mono">#{{ row.id }}</td>
+      <td class="mono">{{ row.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+      <td>{{ row.source_label }}</td>
+      <td>{{ row.flag_model }}</td>
+      <td class="mono">{{ "{:,}".format(row.row_count) }}</td>
+      <td class="mono">{{ "{:,}".format(row.flagged_count) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="caption" style="padding:16px;">No imports yet. Score something below and it'll show up here.</p>
+{% endif %}

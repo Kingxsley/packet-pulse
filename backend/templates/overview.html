@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Overview · Packet Pulse{% endblock %}
+{% block content %}
+<div class="eyebrow">MBIS5015 Capstone · Network Anomaly Detection</div>
+<h1 class="page-title">Overview</h1>
+<p class="page-sub">Isolation Forest, Autoencoder, Random Forest & XGBoost, all scoring <strong>{{ dataset_labels.get(dataset, dataset) }}</strong> side by side.</p>
+
+<div class="grid grid-4" style="margin-bottom:28px;">
+  <div class="stat"><div class="num mono">{{ "{:,}".format(summary.rows) }}</div><div class="desc">rows</div></div>
+  <div class="stat"><div class="num mono">{{ "%.2f"|format(summary.attack_rate_full*100) }}%</div><div class="desc">attack rate</div></div>
+  <div class="stat"><div class="num mono">{{ "{:,}".format(summary.train_rows) }} / {{ "{:,}".format(summary.test_rows) }}</div><div class="desc">train / test rows</div></div>
+  <div class="stat"><div class="num mono">{{ "%.0f"|format(summary.elapsed_sec) }}s</div><div class="desc">training time</div></div>
+</div>
+<p class="caption" style="margin-bottom:28px;">Features used: {{ summary.features|join(", ") }}</p>
+
+<div class="section-title">Stored test-set metrics</div>
+<div class="tbl-wrap panel tick" style="margin-bottom:28px;">
+  <table>
+    <thead><tr><th>Model</th><th>Precision</th><th>Recall</th><th>F1</th><th>ROC-AUC</th></tr></thead>
+    <tbody>
+      {% for model, m in metrics.items() %}
+      <tr>
+        <td>{{ model }}</td>
+        <td class="mono">{{ "%.4f"|format(m.precision) }}</td>
+        <td class="mono">{{ "%.4f"|format(m.recall) }}</td>
+        <td class="mono">{{ "%.4f"|format(m.f1) }}</td>
+        <td class="mono">{{ "%.4f"|format(m.get("roc_auc", 0)) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel tick" style="margin-bottom:28px;">
+  <div id="comparison-chart"></div>
+</div>
+
+<div class="section-title">Retrain pipeline</div>
+<div class="panel tick">
+  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <label class="caption"><input type="checkbox" id="rt-tune"> hyperparameter tuning (slower)</label>
+    <label class="caption"><input type="checkbox" id="rt-autoencoder" checked> train autoencoder</label>
+    <button class="btn btn-primary" id="rt-btn" type="button">Run pipeline now</button>
+    <span id="rt-status" class="caption"></span>
+  </div>
+  <p class="caption" style="margin-top:10px;">Re-runs feature engineering and all four models on <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>. Takes 1 to 4 minutes.</p>
+</div>
+
+<script>
+Plotly.newPlot("comparison-chart", {{ comparison_chart.data | tojson }}, {{ comparison_chart.layout | tojson }}, {displayModeBar: false, responsive: true});
+
+document.getElementById("rt-btn").addEventListener("click", () => {
+  const btn = document.getElementById("rt-btn");
+  const status = document.getElementById("rt-status");
+  btn.disabled = true;
+  status.textContent = "Starting...";
+  const fd = new FormData();
+  fd.append("dataset", {{ dataset|tojson }});
+  fd.append("tune", document.getElementById("rt-tune").checked ? "true" : "false");
+  fd.append("autoencoder", document.getElementById("rt-autoencoder").checked ? "true" : "false");
+  fetch("/api/retrain", {method: "POST", body: fd}).then(r => r.json()).then(({job_id}) => {
+    const poll = setInterval(() => {
+      fetch("/api/jobs/" + job_id).then(r => r.json()).then(({status: s, message}) => {
+        if (s === "running") { status.textContent = "Training..."; }
+        else if (s === "done") { clearInterval(poll); status.textContent = "Done. Reloading..."; location.reload(); }
+        else if (s === "error") { clearInterval(poll); btn.disabled = false; status.textContent = "Failed: " + message; }
+      });
+    }, 3000);
+  });
+});
+</script>
+{% endblock %}

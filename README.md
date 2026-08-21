@@ -3,8 +3,8 @@
 Network traffic anomaly detection for our MBIS5015 capstone, "Anomaly
 Detection in Network Traffic using Machine Learning for Proactive Cyber
 Threat Mitigation." Four models score DNS and DoS packet captures side by
-side, a Streamlit dashboard lets you dig into every prediction and tune
-detection thresholds live, and a landing page ties it together.
+side, a FastAPI app lets you dig into every prediction and tune detection
+thresholds live, and a landing page ties it together.
 
 - **Live dashboard:** https://dashboard-production-8fac.up.railway.app
 - **Landing page:** https://kingxsley.github.io/packet-pulse/
@@ -20,8 +20,8 @@ of disappearing when the tab closes.
   traffic looks like without labels
 - **Random Forest** and **XGBoost** (supervised) learn the attacks directly,
   with SHAP explaining every XGBoost call
-- A **dashboard** with live threshold tuning, per-row true/false
-  positive/negative labeling, and a Live Scoring tab anyone can drop a
+- An **app** with live threshold tuning, per-row true/false
+  positive/negative labeling, and a Live Scoring page anyone can drop a
   dataset into
 - A **landing page** with the real numbers from the last training run, not
   placeholder copy
@@ -41,19 +41,24 @@ anomaly_detection_project/
 │   ├── evaluate.py          # metrics, confusion matrix, SHAP
 │   ├── visualize.py         # saves figures to outputs/figures
 │   └── pipeline.py          # orchestrates one end-to-end run
-├── dashboard/
-│   ├── app.py                # Streamlit dashboard
-│   ├── data_access.py        # cached loaders for results/models
-│   ├── db.py                 # Postgres persistence for Live Scoring imports
-│   └── theme.py               # shared brand styling
+├── backend/
+│   ├── main.py                # FastAPI routes
+│   ├── data_access.py         # cached loaders for results/models
+│   ├── db.py                  # Postgres persistence for Live Scoring imports
+│   ├── scoring.py             # threshold application, TP/FP/FN/TN labeling
+│   ├── charts.py               # Plotly figure builders
+│   ├── templates/               # Jinja2 pages, same design system as the landing page
+│   └── static/app.css           # shared CSS tokens
 ├── data/raw/                 # DNSpackets_output.json, DOSpackets_output.json, Clean_DOS_Capstone.csv
 ├── outputs/
-│   ├── figures/               # PNG/HTML charts per run
+│   ├── figures/               # PNG/HTML charts per CLI run
 │   ├── results/                # per-row predictions (CSV) + metrics/summary/SHAP (JSON)
 │   └── models/                 # trained model + scaler artifacts (joblib / .keras)
 ├── website/index.html          # landing page source
 ├── docs/index.html             # copy of the landing page GitHub Pages serves
-└── legacy/original_script.py   # our first prototype script, kept for reference
+└── legacy/
+    ├── original_script.py       # our first prototype script, kept for reference
+    └── streamlit_dashboard/     # the Streamlit app this backend replaced
 ```
 
 ## Setup
@@ -88,27 +93,37 @@ Each run prints per-model test-set metrics and writes:
 - `outputs/figures/`: feature distributions, confusion matrices, ROC/PR curves, an interactive time-series plot and scatter plot
 - `outputs/models/`: the fitted scaler and all four trained models
 
-## Dashboard
+## The app
 
 ```bash
-streamlit run dashboard/app.py
+uvicorn backend.main:app --reload
 ```
 
-That's the command we originally ran locally while building this. The
-version at the live link above is the same app, just deployed to Railway so
-we're not the only ones who can open it. Five tabs:
+Open http://localhost:8000. This used to be a Streamlit app
+(`streamlit run dashboard/app.py`), and we built the first version that way
+because it got something working fast. We moved off it once the UI stopped
+being good enough: Streamlit only lets you restyle its own widgets through
+injected CSS, which is exactly as fragile as it sounds, and it never looked
+like more than a data-science notebook no matter how much CSS we threw at
+it. The FastAPI app in `backend/` renders real HTML with Jinja2, using the
+same design tokens as the landing page, so the app and the marketing site
+are actually one visual product instead of two. The old Streamlit version
+is kept in `legacy/streamlit_dashboard/` and still runs if you want it
+(`pip install streamlit`, then `streamlit run legacy/streamlit_dashboard/app.py`).
+
+Five pages, all sharing one nav:
 
 - **Overview**: row counts, attack rate, and the stored test-set metrics/comparison chart for all four models
 - **Explore Data**: feature distributions, an interactive time-series view of traffic with predicted/true anomalies highlighted, and a request-rate vs. inter-arrival-time scatter plot
-- **Model Comparison**: confusion matrices, ROC and Precision-Recall curves, all recomputed live as you move the per-model threshold sliders in the sidebar. Also shows exact false-positive/false-negative counts, not just precision/recall, since those are the numbers that actually matter when you're deciding how sensitive to make this
+- **Model Comparison**: confusion matrices, ROC and Precision-Recall curves, all recomputed live as you move the per-model threshold sliders. Also shows exact false-positive/false-negative counts, not just precision/recall, since those are the numbers that actually matter when you're deciding how sensitive to make this
 - **Feature Importance**: the SHAP bar chart for XGBoost
 - **Live Scoring**: upload a CSV/JSON of raw packets (same schema as the training data, `label` optional) and it runs through the persisted scaler + all four models. Every row gets flagged attack/normal, and when you've got ground truth, each one is also labeled true/false positive/negative so you can see exactly what the model got wrong. Imports are saved to Postgres, so you can come back later and see what's been tested
 
-The sidebar also has a **Retrain pipeline** control that runs the same
-pipeline as `run.py`, straight from the browser, for any dataset (with or
-without `--tune`/the autoencoder). It blocks the UI while training runs
-(roughly 1 to 4 minutes), which is fine for a demo but isn't a background
-job queue.
+The Overview page also has a **Retrain pipeline** control that runs the
+same pipeline as `run.py` in a background thread and polls for completion,
+for any dataset (with or without `--tune`/the autoencoder). Training takes
+roughly 1 to 4 minutes; the page shows a status line while it runs instead
+of blocking the whole UI thread the way the Streamlit version did.
 
 ## Data
 

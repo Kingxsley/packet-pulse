@@ -453,43 +453,43 @@
   <section class="wrap" id="features">
     <span class="eyebrow">The dashboard</span>
     <h2>Five ways to see what the models see</h2>
-    <p class="lede">Every feature below is a live tab in the shipped Streamlit app, not a mockup. Launch it yourself from Get Started.</p>
+    <p class="lede">Every feature below is a live page in the shipped app, not a mockup. Launch it yourself from Get Started.</p>
     <div class="feat-grid reveal-stagger reveal">
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 19V13M9 19V6M15 19V10M21 19V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
         <h4>Overview &amp; metrics</h4>
         <p>Row counts, attack rate, and precision/recall/F1/ROC-AUC for all four models, at a glance, updated the moment a new training run finishes.</p>
-        <span class="tag">→ <b>Overview</b> tab</span>
+        <span class="tag">→ <b>Overview</b> page</span>
       </div>
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="4" cy="17" r="1.8" fill="currentColor"/><circle cx="10" cy="8" r="1.8" fill="currentColor"/><circle cx="16" cy="13" r="1.8" fill="currentColor"/><circle cx="19" cy="5" r="1.8" fill="currentColor"/></svg></span>
         <h4>Explore the traffic</h4>
         <p>Interactive time-series and scatter views of every packet, with each model's predicted attacks and the true labels marked side by side.</p>
-        <span class="tag">→ <b>Explore Data</b> tab</span>
+        <span class="tag">→ <b>Explore Data</b> page</span>
       </div>
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><line x1="2" y1="11" x2="20" y2="11" stroke="currentColor" stroke-width="1.7"/><circle cx="14" cy="11" r="3.4" fill="#0b0e13" stroke="currentColor" stroke-width="1.7"/></svg></span>
         <h4>Tune the threshold live</h4>
         <p>Drag a model's operating point and watch its confusion matrix, ROC curve, and false-positive count recompute instantly. No retraining required.</p>
-        <span class="tag">→ <b>Model Comparison</b> tab</span>
+        <span class="tag">→ <b>Model Comparison</b> page</span>
       </div>
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="2.2" fill="currentColor"/><path d="M11 2V6M11 16V20M2 11H6M16 11H20M4.8 4.8L7.5 7.5M14.5 14.5L17.2 17.2M17.2 4.8L14.5 7.5M7.5 14.5L4.8 17.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
         <h4>Explainable by design</h4>
         <p>SHAP feature importance shows exactly which signal drove each XGBoost verdict: packet size, rate, or timing, not just that it fired.</p>
-        <span class="tag">→ <b>Feature Importance</b> tab</span>
+        <span class="tag">→ <b>Feature Importance</b> page</span>
       </div>
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 15V3M11 3L6 8M11 3L16 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 15V17.5C3 18.6 3.9 19.5 5 19.5H17C18.1 19.5 19 18.6 19 17.5V15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
         <h4>Score anything, instantly</h4>
         <p>Drop in a CSV or JSON of raw packets and get back a verdict, a confidence score, and, when you have ground truth, a true/false positive/negative breakdown per row.</p>
-        <span class="tag">→ <b>Live Scoring</b> tab</span>
+        <span class="tag">→ <b>Live Scoring</b> page</span>
       </div>
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><rect x="12" y="3" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="12" width="7" height="7" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 12V19M12 15.5H19" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
         <h4>Every flag, accounted for</h4>
         <p>Attack/normal isn't a hidden probability. It's a labeled outcome: true positive, false positive, false negative, true negative, colour-coded on every row.</p>
-        <span class="tag">→ all tabs</span>
+        <span class="tag">→ all pages</span>
       </div>
     </div>
   </section>
@@ -536,11 +536,12 @@
     <span class="eyebrow">Under the hood</span>
     <div class="stack-strip reveal">
       <span class="stack-badge">Python 3.11</span>
+      <span class="stack-badge">FastAPI</span>
       <span class="stack-badge">scikit-learn</span>
       <span class="stack-badge">XGBoost</span>
       <span class="stack-badge">TensorFlow / Keras</span>
       <span class="stack-badge">SHAP</span>
-      <span class="stack-badge">Streamlit</span>
+      <span class="stack-badge">PostgreSQL</span>
       <span class="stack-badge">Plotly</span>
     </div>
   </section>
@@ -564,8 +565,8 @@
           <div><span class="p">$</span> git clone github.com/Kingxsley/packet-pulse</div>
           <div><span class="p">$</span> cd packet-pulse</div>
           <div><span class="p">$</span> pip install -r requirements.txt</div>
-          <div><span class="p">$</span> streamlit run dashboard/app.py</div>
-          <div class="c">→ open http://localhost:8501</div>
+          <div><span class="p">$</span> uvicorn backend.main:app --reload</div>
+          <div class="c">→ open http://localhost:8000</div>
         </div>
       </div>
     </div>

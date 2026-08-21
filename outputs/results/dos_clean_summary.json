@@ -13,5 +13,5 @@
   "test_rows": 33860,
   "isolation_forest_contamination": 0.01,
   "autoencoder_trained": true,
-  "elapsed_sec": 99.07390069961548
+  "elapsed_sec": 124.99523615837097
 }

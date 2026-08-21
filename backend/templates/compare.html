@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Model Comparison · Packet Pulse{% endblock %}
+{% block content %}
+<div class="eyebrow">Recomputed live, no retraining</div>
+<h1 class="page-title">Model Comparison</h1>
+<p class="page-sub">Drag a threshold and every table, matrix, and curve below updates from the held-out test set instantly.</p>
+
+<div class="panel tick" style="margin-bottom:28px;">
+  <div class="grid grid-4">
+    <div class="slider-row">
+      <label>Random Forest probability <span class="val mono" id="val-rf">0.50</span></label>
+      <input type="range" id="rf" min="0" max="1" step="0.01" value="0.5">
+    </div>
+    <div class="slider-row">
+      <label>XGBoost probability <span class="val mono" id="val-xgb">0.50</span></label>
+      <input type="range" id="xgb" min="0" max="1" step="0.01" value="0.5">
+    </div>
+    <div class="slider-row">
+      <label>Isolation Forest sensitivity <span class="val mono" id="val-iso">20%</span></label>
+      <input type="range" id="iso" min="1" max="50" step="1" value="20">
+    </div>
+    <div class="slider-row">
+      <label>Autoencoder sensitivity <span class="val mono" id="val-ae">5%</span></label>
+      <input type="range" id="ae" min="1" max="50" step="1" value="5">
+    </div>
+  </div>
+</div>
+
+<div class="section-title">Live metrics at current thresholds <span id="loading" class="spinner" style="display:none;"></span></div>
+<div class="tbl-wrap panel tick" style="margin-bottom:28px;">
+  <table>
+    <thead><tr><th>Model</th><th>Precision</th><th>Recall</th><th>F1</th><th>True positives</th><th>False positives</th><th>False negatives</th></tr></thead>
+    <tbody id="metrics-body"></tbody>
+  </table>
+</div>
+<p class="caption" style="margin-bottom:28px;">A <strong>false positive</strong> is normal traffic wrongly flagged as an attack. A <strong>false negative</strong> is a real attack that slipped through unflagged.</p>
+
+<div class="section-title">Confusion matrices</div>
+<div class="grid grid-4" style="margin-bottom:28px;">
+  <div class="panel tick"><div id="cm-isolation_forest"></div></div>
+  <div class="panel tick"><div id="cm-autoencoder"></div></div>
+  <div class="panel tick"><div id="cm-random_forest"></div></div>
+  <div class="panel tick"><div id="cm-xgboost"></div></div>
+</div>
+
+<div class="section-title">ROC & Precision-Recall curves</div>
+<div class="grid grid-2">
+  <div class="panel tick"><div id="roc"></div></div>
+  <div class="panel tick"><div id="pr"></div></div>
+</div>
+
+<script>
+const dataset = {{ dataset|tojson }};
+const modelKeys = ["isolation_forest", "autoencoder", "random_forest", "xgboost"];
+let timer = null;
+
+function render(payload) {
+  const body = document.getElementById("metrics-body");
+  body.innerHTML = payload.metrics.map(r => `
+    <tr>
+      <td>${r.model}</td>
+      <td class="mono">${r.precision.toFixed(4)}</td>
+      <td class="mono">${r.recall.toFixed(4)}</td>
+      <td class="mono">${r.f1.toFixed(4)}</td>
+      <td class="mono">${r.tp.toLocaleString()}</td>
+      <td class="mono">${r.fp.toLocaleString()}</td>
+      <td class="mono">${r.fn.toLocaleString()}</td>
+    </tr>`).join("");
+
+  modelKeys.forEach(key => {
+    const cm = payload.confusion[key];
+    if (cm) Plotly.react("cm-" + key, cm.data, cm.layout, {displayModeBar: false, responsive: true});
+  });
+  Plotly.react("roc", payload.roc.data, payload.roc.layout, {displayModeBar: false, responsive: true});
+  Plotly.react("pr", payload.pr.data, payload.pr.layout, {displayModeBar: false, responsive: true});
+}
+
+function currentThresholds() {
+  return {
+    rf: document.getElementById("rf").value,
+    xgb: document.getElementById("xgb").value,
+    iso: document.getElementById("iso").value,
+    ae: document.getElementById("ae").value,
+  };
+}
+
+function updateLabels() {
+  document.getElementById("val-rf").textContent = parseFloat(document.getElementById("rf").value).toFixed(2);
+  document.getElementById("val-xgb").textContent = parseFloat(document.getElementById("xgb").value).toFixed(2);
+  document.getElementById("val-iso").textContent = document.getElementById("iso").value + "%";
+  document.getElementById("val-ae").textContent = document.getElementById("ae").value + "%";
+}
+
+function fetchAndRender() {
+  document.getElementById("loading").style.display = "inline-block";
+  const t = currentThresholds();
+  const qs = new URLSearchParams({dataset, ...t});
+  fetch("/api/compare?" + qs.toString())
+    .then(r => r.json())
+    .then(payload => { render(payload); document.getElementById("loading").style.display = "none"; });
+}
+
+["rf", "xgb", "iso", "ae"].forEach(id => {
+  document.getElementById(id).addEventListener("input", () => {
+    updateLabels();
+    clearTimeout(timer);
+    timer = setTimeout(fetchAndRender, 150);
+  });
+});
+
+updateLabels();
+fetchAndRender();
+</script>
+{% endblock %}

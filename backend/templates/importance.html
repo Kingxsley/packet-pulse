@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Feature Importance · Packet Pulse{% endblock %}
+{% block content %}
+<div class="eyebrow">XGBoost, SHAP values</div>
+<h1 class="page-title">Feature Importance</h1>
+<p class="page-sub">Mean |SHAP value| per feature: how much each feature drives the model's attack/normal decision, on average.</p>
+<div class="panel tick"><div id="shap-chart"></div></div>
+<script>
+Plotly.newPlot("shap-chart", {{ chart.data | tojson }}, {{ chart.layout | tojson }}, {displayModeBar: false, responsive: true});
+</script>
+{% endblock %}

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Live Scoring · Packet Pulse{% endblock %}
+{% block content %}
+<div class="eyebrow">Score anything, instantly</div>
+<h1 class="page-title">Live Scoring</h1>
+<p class="page-sub">Upload raw packet data (CSV or JSON) with columns <code class="mono">source_ip, dest_ip, source_port, dest_port, protocol, packet_length, timestamp, inter_arrival_time</code> (+ optional <code class="mono">label</code>), scored against the models currently trained for <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>.</p>
+<p class="caption">Isolation Forest/Autoencoder sensitivity is a percentile of the uploaded batch's own scores, so it's most meaningful on batches of at least a few dozen packets rather than single rows.</p>
+
+{% if db_enabled %}
+<div class="section-title">Import history (Postgres)</div>
+<div class="tbl-wrap panel tick" style="margin-bottom:28px;" id="history-panel">
+  {% include "_history_table.html" %}
+</div>
+{% else %}
+<p class="caption" style="margin-bottom:20px;">Import history is off (no DATABASE_URL set): imports won't persist across restarts.</p>
+{% endif %}
+
+<div class="panel tick" style="margin-bottom:20px;">
+  <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center;">
+    <button class="btn btn-primary" id="demo-btn" type="button">Try it with a random sample</button>
+    <label class="btn" style="cursor:pointer;">
+      Upload packets (CSV/JSON)
+      <input type="file" id="file-input" accept=".csv,.json" style="display:none;">
+    </label>
+    <label class="caption">Flag attacks using
+      <select id="flag-model" class="dataset-select">
+        <option>Isolation Forest</option><option>Autoencoder</option>
+        <option selected>Random Forest</option><option>XGBoost</option>
+      </select>
+    </label>
+    <span class="spinner" id="score-spinner" style="display:none;"></span>
+  </div>
+</div>
+
+<div id="results"></div>
+
+<script>
+const dataset = {{ dataset|tojson }};
+
+function scoreForm(formData) {
+  document.getElementById("score-spinner").style.display = "inline-block";
+  formData.append("dataset", dataset);
+  formData.append("flag_model", document.getElementById("flag-model").value);
+  fetch("/api/live-score", {method: "POST", body: formData})
+    .then(r => r.json())
+    .then(payload => { renderResults(payload); refreshHistory(); })
+    .catch(e => { document.getElementById("results").innerHTML = `<p class="caption">Error: ${e}</p>`; })
+    .finally(() => { document.getElementById("score-spinner").style.display = "none"; });
+}
+
+document.getElementById("demo-btn").addEventListener("click", () => {
+  scoreForm(new FormData());
+});
+document.getElementById("file-input").addEventListener("change", (e) => {
+  if (!e.target.files.length) return;
+  const fd = new FormData();
+  fd.append("file", e.target.files[0]);
+  scoreForm(fd);
+});
+
+function pillClass(outcome) {
+  return {"True Positive": "pill-tp", "False Positive": "pill-fp",
+          "False Negative": "pill-fn", "True Negative": "pill-tn"}[outcome] || "";
+}
+
+function renderResults(p) {
+  if (p.error) {
+    document.getElementById("results").innerHTML = `<p class="caption">${p.error}</p>`;
+    return;
+  }
+  let html = `<div class="section-title">Scored ${p.rows.toLocaleString()} packets</div>`;
+  if (p.counts) {
+    html += `<div class="grid grid-4" style="margin-bottom:20px;">
+      <div class="stat"><div class="num mono">${p.counts["True Positive"]}</div><div class="desc">True positives</div></div>
+      <div class="stat"><div class="num mono">${p.counts["False Positive"]}</div><div class="desc">False positives</div></div>
+      <div class="stat"><div class="num mono">${p.counts["False Negative"]}</div><div class="desc">False negatives</div></div>
+      <div class="stat"><div class="num mono">${p.counts["True Negative"]}</div><div class="desc">True negatives</div></div>
+    </div>`;
+  } else {
+    html += `<p class="caption" style="margin-bottom:20px;">Flagged ${p.flagged} / ${p.rows} as attack (no ground-truth labels in this batch).</p>`;
+  }
+
+  html += `<div class="tbl-wrap panel tick" style="margin-bottom:20px;"><table><thead><tr>
+    <th>timestamp</th><th>source_ip</th><th>dest_ip</th><th>protocol</th><th>packet_length</th>
+    ${p.has_labels ? "<th>label</th>" : ""}<th>flagged</th>${p.has_labels ? "<th>outcome</th>" : ""}
+    </tr></thead><tbody>`;
+  html += p.preview.map(row => `<tr>
+      <td class="mono">${row.timestamp}</td><td>${row.source_ip}</td><td>${row.dest_ip}</td>
+      <td>${row.protocol}</td><td class="mono">${row.packet_length}</td>
+      ${p.has_labels ? `<td class="mono">${row.label}</td>` : ""}
+      <td>${row.Flagged}</td>
+      ${p.has_labels ? `<td><span class="pill ${pillClass(row.Outcome)}">${row.Outcome}</span></td>` : ""}
+    </tr>`).join("");
+  html += `</tbody></table></div>`;
+
+  if (p.metrics) {
+    html += `<div class="tbl-wrap panel tick" style="margin-bottom:20px;"><table><thead><tr>
+      <th>model</th><th>precision</th><th>recall</th><th>f1</th></tr></thead><tbody>`;
+    html += Object.entries(p.metrics).map(([m, v]) => `<tr>
+      <td>${m}</td><td class="mono">${v.precision.toFixed(4)}</td>
+      <td class="mono">${v.recall.toFixed(4)}</td><td class="mono">${v.f1.toFixed(4)}</td></tr>`).join("");
+    html += `</tbody></table></div>`;
+  }
+
+  if (p.import_id) {
+    html += `<p class="caption">Saved to Postgres as import #${p.import_id}.</p>`;
+  }
+  document.getElementById("results").innerHTML = html;
+}
+
+function refreshHistory() {
+  const panel = document.getElementById("history-panel");
+  if (!panel) return;
+  fetch("/api/history?dataset=" + encodeURIComponent(dataset))
+    .then(r => r.text())
+    .then(html => { panel.innerHTML = html; });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Explore Data · Packet Pulse{% endblock %}
+{% block content %}
+<div class="eyebrow">{{ "{:,}".format(row_count) }} rows loaded</div>
+<h1 class="page-title">Explore the traffic</h1>
+<p class="page-sub">Plots below sample up to 15,000 points for responsiveness.</p>
+
+<div class="section-title">Feature distributions: attack vs. normal</div>
+<div class="grid grid-4" style="margin-bottom:28px;">
+  {% for feature in features %}
+  <div class="panel tick"><div id="dist-{{ loop.index }}"></div></div>
+  {% endfor %}
+</div>
+
+<div class="section-title">Traffic over time</div>
+<form method="get" style="margin-bottom:14px;">
+  <input type="hidden" name="dataset" value="{{ dataset }}">
+  <label class="caption">Highlight predictions from
+    <select name="highlight" class="dataset-select" onchange="this.form.submit()">
+      {% for m in model_order %}
+      <option value="{{ m }}" {{ 'selected' if m==highlight }}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+<div class="panel tick" style="margin-bottom:28px;"><div id="timeseries"></div></div>
+
+<div class="section-title">Request rate vs. inter-arrival time</div>
+<div class="panel tick"><div id="scatter"></div></div>
+
+<script>
+const distCharts = {{ dist_charts | tojson }};
+distCharts.forEach((c, i) => Plotly.newPlot("dist-" + (i+1), c.data, c.layout, {displayModeBar: false, responsive: true}));
+Plotly.newPlot("timeseries", {{ timeseries_chart.data | tojson }}, {{ timeseries_chart.layout | tojson }}, {displayModeBar: false, responsive: true});
+Plotly.newPlot("scatter", {{ scatter_chart.data | tojson }}, {{ scatter_chart.layout | tojson }}, {displayModeBar: false, responsive: true});
+</script>
+{% endblock %}
