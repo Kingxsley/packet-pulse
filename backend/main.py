@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sklearn.metrics import f1_score, precision_score, recall_score
@@ -17,9 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend import charts, data_access as da, db  # noqa: E402
-from backend.scoring import (MODEL_COLORS, MODEL_ORDER, apply_thresholds,  # noqa: E402
-                              outcome_counts, pred_col, score_col)
+from backend import charts, data_access as da, db, siem  # noqa: E402
+from backend.scoring import (DEFAULT_THRESHOLDS, MODEL_COLORS, MODEL_ORDER,  # noqa: E402
+                              apply_thresholds, outcome_counts, pred_col, score_col)
 from src import config  # noqa: E402
 from src.features import engineer_features  # noqa: E402
 
@@ -27,6 +27,7 @@ DATASET_LABELS = {
     "dns": "DNS capture (306k rows)",
     "dos": "DoS capture, raw (112k rows)",
     "dos_clean": "DoS capture, cleaned (112k rows)",
+    "combined": "Combined: DNS + DoS",
 }
 LIVE_REQUIRED_COLS = ["source_ip", "dest_ip", "source_port", "dest_port",
                        "protocol", "packet_length", "timestamp", "inter_arrival_time"]
@@ -38,20 +39,31 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 _jobs: dict[str, dict] = {}
 
 
+def _selectable_datasets() -> list[str]:
+    available = da.available_datasets()
+    return available + ["combined"] if len(available) > 1 else available
+
+
 def _base_ctx(request: Request, dataset: str, active: str) -> dict:
     return {
-        "request": request, "dataset": dataset, "datasets": da.available_datasets(),
+        "request": request, "dataset": dataset, "datasets": _selectable_datasets(),
         "dataset_labels": DATASET_LABELS, "active": active, "base_path": request.url.path,
     }
 
 
-def _validate_dataset(dataset: str) -> str:
+def _validate_dataset(dataset: str, allow_combined: bool = False) -> str:
     available = da.available_datasets()
     if not available:
         raise HTTPException(503, "No trained datasets found. Run `python run.py --dataset dos_clean` first.")
+    if allow_combined and dataset == "combined" and len(available) > 1:
+        return "combined"
     if dataset not in available:
         dataset = available[0]
     return dataset
+
+
+def _results_for(dataset: str) -> pd.DataFrame:
+    return da.load_combined_results() if dataset == "combined" else da.load_results(dataset)
 
 
 @app.get("/", response_class=RedirectResponse)
@@ -63,42 +75,60 @@ def root():
 
 @app.get("/monitor", response_class=HTMLResponse)
 def monitor(request: Request, dataset: str = "dos_clean"):
-    dataset = _validate_dataset(dataset)
+    dataset = _validate_dataset(dataset, allow_combined=True)
     ctx = _base_ctx(request, dataset, "monitor")
     ctx.update(model_order=MODEL_ORDER)
     return templates.TemplateResponse(request, "monitor.html", ctx)
 
 
+def _row_payload(row, pc: str, sc: str) -> dict:
+    return {
+        "timestamp": row["timestamp"].isoformat(),
+        "source_ip": row["source_ip"], "dest_ip": row["dest_ip"],
+        "source_port": int(row["source_port"]), "dest_port": int(row["dest_port"]),
+        "protocol": row["protocol"], "packet_length": int(row["packet_length"]),
+        "source_dataset": row.get("source_dataset"),
+        "label": int(row["label"]) if "label" in row and pd.notna(row["label"]) else None,
+        "flagged": int(row[pc]) if pc in row and pd.notna(row[pc]) else None,
+        "score": float(row[sc]) if sc in row and pd.notna(row[sc]) else None,
+    }
+
+
 @app.get("/api/monitor-stream")
-async def monitor_stream(request: Request, dataset: str, flag_model: str = "XGBoost", speed: int = 8):
+async def monitor_stream(request: Request, dataset: str, flag_model: str = "Random Forest", speed: int = 8):
     import asyncio
     import json
 
-    dataset = _validate_dataset(dataset)
+    dataset = _validate_dataset(dataset, allow_combined=True)
     if flag_model not in MODEL_ORDER:
-        flag_model = "XGBoost"
-    df = da.load_results(dataset).sort_values("timestamp").reset_index(drop=True)
+        flag_model = "Random Forest"
     pc, sc = pred_col(flag_model), score_col(flag_model)
     interval = 1.0 / max(min(speed, 50), 1)
-    n = len(df)
+
+    if dataset == "combined":
+        # Round-robin between each source dataset so both attack surfaces
+        # are visibly "live" together, instead of playing one capture
+        # start-to-finish and only then starting the other.
+        sources = [
+            apply_thresholds(da.load_results(name), DEFAULT_THRESHOLDS)
+            .sort_values("timestamp").reset_index(drop=True).assign(source_dataset=name)
+            for name in da.available_datasets()
+        ]
+    else:
+        sources = [apply_thresholds(da.load_results(dataset), DEFAULT_THRESHOLDS)
+                   .sort_values("timestamp").reset_index(drop=True)]
 
     async def gen():
-        i = 0
+        counters = [0] * len(sources)
+        src_i = 0
         while True:
             if await request.is_disconnected():
                 break
-            row = df.iloc[i % n]
-            payload = {
-                "timestamp": row["timestamp"].isoformat(),
-                "source_ip": row["source_ip"], "dest_ip": row["dest_ip"],
-                "source_port": int(row["source_port"]), "dest_port": int(row["dest_port"]),
-                "protocol": row["protocol"], "packet_length": int(row["packet_length"]),
-                "label": int(row["label"]) if "label" in row and pd.notna(row["label"]) else None,
-                "flagged": int(row[pc]) if pc in row and pd.notna(row[pc]) else None,
-                "score": float(row[sc]) if sc in row and pd.notna(row[sc]) else None,
-            }
-            yield f"data: {json.dumps(payload)}\n\n"
-            i += 1
+            df = sources[src_i]
+            row = df.iloc[counters[src_i] % len(df)]
+            counters[src_i] += 1
+            src_i = (src_i + 1) % len(sources)
+            yield f"data: {json.dumps(_row_payload(row, pc, sc))}\n\n"
             await asyncio.sleep(interval)
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers={
@@ -244,7 +274,7 @@ async def api_live_score(dataset: str = Form(...), flag_model: str = Form(...),
         from src.models import autoencoder_scores
         scored["score_autoencoder"] = autoencoder_scores(artifacts["autoencoder"], X_scaled)
 
-    scored = apply_thresholds(scored, {"Random Forest": 0.5, "XGBoost": 0.5, "Isolation Forest": 20, "Autoencoder": 5})
+    scored = apply_thresholds(scored, DEFAULT_THRESHOLDS)
 
     flag_pc = pred_col(flag_model)
     if flag_pc not in scored:
@@ -302,6 +332,75 @@ def api_retrain(dataset: str = Form(...), tune: bool = Form(False), autoencoder:
 @app.get("/api/jobs/{job_id}")
 def api_job_status(job_id: str):
     return JSONResponse(_jobs.get(job_id, {"status": "unknown"}))
+
+
+INCIDENT_COLS = ["timestamp", "source_ip", "source_port", "dest_ip", "dest_port",
+                  "protocol", "packet_length", "label", "score", "source_dataset"]
+
+
+def _incidents_df(dataset: str, flag_model: str) -> pd.DataFrame:
+    df = apply_thresholds(_results_for(dataset), DEFAULT_THRESHOLDS)
+    pc, sc = pred_col(flag_model), score_col(flag_model)
+    if pc not in df:
+        return df.iloc[0:0]
+    flagged = df[df[pc] == 1].copy()
+    flagged["score"] = flagged[sc] if sc in flagged else None
+    return flagged.sort_values("timestamp", ascending=False)
+
+
+@app.get("/incidents", response_class=HTMLResponse)
+def incidents(request: Request, dataset: str = "dos_clean", flag_model: str = "Random Forest", page: int = 1):
+    dataset = _validate_dataset(dataset, allow_combined=True)
+    if flag_model not in MODEL_ORDER:
+        flag_model = "Random Forest"
+    df = _incidents_df(dataset, flag_model)
+
+    page_size = 50
+    total = len(df)
+    total_pages = max(1, -(-total // page_size))
+    page = max(1, min(page, total_pages))
+    page_df = df.iloc[(page - 1) * page_size: page * page_size].copy()
+    cols = [c for c in INCIDENT_COLS if c in page_df.columns]
+    if "timestamp" in page_df:
+        page_df["timestamp"] = page_df["timestamp"].astype(str)
+    rows = page_df[cols].where(pd.notna(page_df[cols]), None).to_dict(orient="records")
+
+    ctx = _base_ctx(request, dataset, "incidents")
+    ctx.update(flag_model=flag_model, model_order=MODEL_ORDER, rows=rows, total=total,
+                page=page, total_pages=total_pages, has_source_col="source_dataset" in df.columns)
+    return templates.TemplateResponse(request, "incidents.html", ctx)
+
+
+@app.get("/api/incidents/export.csv")
+def export_incidents_csv(dataset: str = "dos_clean", flag_model: str = "Random Forest", limit: int = 5000):
+    dataset = _validate_dataset(dataset, allow_combined=True)
+    df = _incidents_df(dataset, flag_model).head(limit)
+    cols = [c for c in INCIDENT_COLS if c in df.columns]
+    return PlainTextResponse(df[cols].to_csv(index=False), media_type="text/csv", headers={
+        "Content-Disposition": f'attachment; filename="{dataset}_incidents.csv"',
+    })
+
+
+@app.get("/api/incidents/export.cef")
+def export_incidents_cef(dataset: str = "dos_clean", flag_model: str = "Random Forest", limit: int = 5000):
+    dataset = _validate_dataset(dataset, allow_combined=True)
+    df = _incidents_df(dataset, flag_model).head(limit)
+    return PlainTextResponse(siem.to_cef(df, flag_model), media_type="text/plain", headers={
+        "Content-Disposition": f'attachment; filename="{dataset}_incidents.cef"',
+    })
+
+
+@app.post("/api/incidents/forward-siem")
+def forward_siem(dataset: str = Form(...), flag_model: str = Form(...),
+                  hec_url: str = Form(...), hec_token: str = Form(...), limit: int = Form(200)):
+    dataset = _validate_dataset(dataset, allow_combined=True)
+    df = _incidents_df(dataset, flag_model).head(min(limit, 500))
+    if df.empty:
+        return JSONResponse({"ok": False, "count": 0, "body": "No incidents matched this model/dataset."})
+    events = siem.to_hec_events(df, flag_model)
+    result = siem.send_to_hec(hec_url, hec_token, events)
+    result["count"] = len(events)
+    return JSONResponse(result)
 
 
 @app.get("/health")

@@ -454,12 +454,18 @@
     <span class="eyebrow">The product</span>
     <h2>Built around watching traffic, not just scoring datasets</h2>
     <p class="lede">Every feature below is a live page in the shipped app, not a mockup. Launch it yourself from Get Started.</p>
-    <div class="feat-grid reveal-stagger reveal">
+    <div class="feat-grid reveal-stagger reveal" style="grid-template-columns: repeat(2, 1fr);">
       <div class="feat r-item" style="grid-column: span 2;">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M2 11H6L8.5 4L13 18L15.5 11H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         <h4>Threat monitor</h4>
-        <p>The front door of the app: real captured packets replayed through the trained models in near real time, scored packet by packet, with a live feed, a running flag rate, and a threat-level indicator that escalates when the traffic gets hostile. This is what a SOC-facing view of the pipeline looks like, not a chart.</p>
+        <p>The front door of the app: real captured packets replayed through the trained models in near real time, scored packet by packet, with a live feed, a running flag rate, and a threat-level indicator that escalates when the traffic gets hostile. Merges the DNS and DoS captures into one feed too, so both attack surfaces are watched at once instead of one at a time. This is what a SOC-facing view of the pipeline looks like, not a chart.</p>
         <span class="tag">→ <b>Threat Monitor</b> page</span>
+      </div>
+      <div class="feat r-item">
+        <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 4H18V16L14 20H4V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 9H14M8 13H12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+        <h4>Incidents you can export</h4>
+        <p>Every flagged packet, filterable, paginated, exportable as CSV or CEF for a SIEM. A Splunk HTTP Event Collector form forwards incidents straight into whatever alerting stack is already in place.</p>
+        <span class="tag">→ <b>Incidents</b> page</span>
       </div>
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 15V3M11 3L6 8M11 3L16 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 15V17.5C3 18.6 3.9 19.5 5 19.5H17C18.1 19.5 19 18.6 19 17.5V15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
@@ -553,6 +559,7 @@
       <span class="stack-badge">SHAP</span>
       <span class="stack-badge">PostgreSQL</span>
       <span class="stack-badge">Plotly</span>
+      <span class="stack-badge">CEF / Splunk HEC</span>
     </div>
   </section>
 

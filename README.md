@@ -50,6 +50,7 @@ anomaly_detection_project/
 │   ├── db.py                  # Postgres persistence for Live Scoring imports
 │   ├── scoring.py             # threshold application, TP/FP/FN/TN labeling
 │   ├── charts.py               # Plotly figure builders
+│   ├── siem.py                  # CEF export + Splunk HEC forwarder
 │   ├── templates/               # Jinja2 pages, same design system as the landing page
 │   └── static/app.css           # shared CSS tokens
 ├── data/raw/                 # DNSpackets_output.json, DOSpackets_output.json, Clean_DOS_Capstone.csv
@@ -114,13 +115,24 @@ are actually one visual product instead of two. The old Streamlit version
 is kept in `legacy/streamlit_dashboard/` and still runs if you want it
 (`pip install streamlit`, then `streamlit run legacy/streamlit_dashboard/app.py`).
 
-Seven pages, split into two groups in the nav. **Threat Monitor** and
-**Live Scoring** are the cyber-facing half, the ones that are actually
-about watching and testing traffic. Everything else sits under an
-"Analytics" divider because that's what it is: supporting detail, not the
-point of the app.
+Eight pages, split into two groups in the nav. **Threat Monitor**,
+**Incidents**, and **Live Scoring** are the cyber-facing half, the ones
+that are actually about watching and testing traffic. Everything else sits
+under an "Analytics" divider because that's what it is: supporting detail,
+not the point of the app.
+
+Every page's dataset picker also offers **Combined: DNS + DoS**, which
+merges both trained datasets (tagged with `source_dataset` so you can
+always tell which capture a row came from) instead of making you pick one
+attack surface to watch at a time. Threat Monitor round-robins between the
+two captures so both are visibly live at once, and Incidents/exports can
+filter or include both. Combined view only makes sense on those two pages
+(the Analytics pages compare models on one training run each, and merging
+two different runs' metrics wouldn't mean anything), so picking it
+elsewhere just falls back to the current dataset.
 
 - **Threat Monitor**: replays a dataset's packets in timestamp order through a Server-Sent Events stream, scoring each one against the persisted models as it goes. A live feed shows every packet with its verdict, a stat strip tracks packets scanned/attacks flagged/flag rate for the session, and a threat-level pill (NOMINAL/ELEVATED/CRITICAL) escalates based on the rolling flag rate. This is a replay of real recorded captures at a controllable speed, not a live tap on an actual network. See "What this doesn't do yet" below for what real packet capture would take
+- **Incidents**: every packet the selected model flagged, newest first, paginated. Export as CSV for a spreadsheet, or as CEF (Common Event Format) for a SIEM that understands it, which is most of them. There's also a **Forward to SIEM** form that batches incidents as Splunk HTTP Event Collector events and POSTs them to a URL + token you provide, matching Splunk's documented HEC request shape exactly. We haven't tested it against a live Splunk instance (don't have one), but tested the actual HTTP mechanics against a mock endpoint: request goes out, response comes back, errors are caught and reported instead of crashing
 - **Live Scoring**: upload a CSV/JSON of raw packets (same schema as the training data, `label` optional) and it runs through the persisted scaler + all four models. Every row gets flagged attack/normal, and when you've got ground truth, each one is also labeled true/false positive/negative so you can see exactly what the model got wrong. Imports are saved to Postgres, so you can come back later and see what's been tested
 - **Overview**: row counts, attack rate, and the stored test-set metrics/comparison chart for all four models
 - **Explore Data**: feature distributions, an interactive time-series view of traffic with predicted/true anomalies highlighted, and a request-rate vs. inter-arrival-time scatter plot
@@ -162,11 +174,18 @@ Test-set metrics from a full run of both datasets (defaults, no `--tune`):
 | Random Forest | 0.9999 | 1.000 | 0.9999 | 1.000 |
 | XGBoost | 0.9999 | 1.000 | 0.9999 | 1.000 |
 
+**Random Forest is the default "flag with" model** across the Threat
+Monitor, Incidents, and Live Scoring pages. It's the highest-F1 model on
+both datasets, and it isn't close on `dos_clean`: 0.612 vs. XGBoost's 0.168,
+because XGBoost's recall is just as high but its precision collapses under
+that dataset's 1-in-800 attack rate. Every page still lets you switch to
+any of the four models; this is just the default, not the only option.
+
 A couple of things worth knowing before you trust these numbers:
 
 - On `dos_clean`, recall stays high but precision drops hard at the default
   0.5 threshold, because there are only ~145 attack rows out of 112k. Use
-  the Model Comparison tab's sliders to see the actual tradeoff instead of
+  the Model Comparison page's sliders to see the actual tradeoff instead of
   reading one row off this table.
 - The near-perfect `dns` scores aren't a bug, but we wouldn't ship them
   without a second look: SHAP shows `packet_length` alone drives almost all
@@ -199,16 +218,43 @@ polls or subscribes to, scoring each record as it arrives instead of in a
 batch. The four models and the feature engineering wouldn't need to
 change, they're already fast enough for that. What would need to change:
 
-- A real ingestion source instead of static files
-- Flagged attacks pushing to something a human sees fast (Slack, PagerDuty,
-  email) instead of sitting in a dashboard tab waiting to be opened
+- A real ingestion source instead of static files (see below)
 - Multi-user auth, since right now anyone with the URL can see everyone
   else's imports
 - A background job queue for retraining, instead of blocking the UI thread
 
-The Postgres database we just added is a step in that direction. It's the
-first piece of this system that's a real database instead of files on
-disk, and it's what an alerting pipeline would build on top of.
+Two things we already shipped that used to be on this list: Postgres
+(`backend/db.py`) gives the system a real database instead of files on
+disk, and the Incidents page's CEF export + Splunk HEC forwarder
+(`backend/siem.py`) is a real path for flagged attacks to reach a human
+fast, through whatever SIEM/alerting stack a company already runs, instead
+of sitting in a browser tab waiting to be opened.
+
+### Adding a real ingestion source
+
+This is the actual gap, and it's worth being specific about what closing
+it would take rather than leaving it vague:
+
+1. **Something has to read the wire.** A normal server only sees traffic
+   addressed to it, so you need either a SPAN/mirror port on the switch (or
+   a physical network tap), or, for a cloud deployment, the provider's
+   traffic-mirroring feature (AWS Traffic Mirroring, Azure vTap, GCP Packet
+   Mirroring), since you can't tap a virtual network the way you'd tap a cable.
+2. **[Zeek](https://zeek.org/)** pointed at that interface writes a
+   `conn.log` with source/dest IP and port, protocol, byte counts, and
+   timestamps for every connection: almost exactly `src/config.py`'s
+   `REQUIRED_RAW_COLS`, and a lot less work than parsing raw packets
+   ourselves.
+3. **A small adapter script** tails `conn.log`, renames Zeek's fields to
+   ours, batches a few seconds of rows, and `POST`s them as JSON to
+   `/api/live-score` (`backend/main.py`), which already does feature
+   engineering and scoring, no new ML code needed.
+4. **Swap the Threat Monitor's source.** `/api/monitor-stream` currently
+   reads a static CSV; pointed at a real feed, it'd read from a queue
+   (Redis Streams or Kafka) that the adapter pushes into instead, and drop
+   the "replay of recorded captures" framing since it'd actually be live.
+
+None of this is implemented. It's the honest next step, not a feature.
 
 ## What we fixed from the original script
 

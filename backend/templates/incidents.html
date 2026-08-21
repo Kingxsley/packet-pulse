@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Incidents · Packet Pulse{% endblock %}
+{% block content %}
+<div class="eyebrow">Flagged for investigation</div>
+<h1 class="page-title">Incidents</h1>
+<p class="page-sub">Every packet <strong>{{ flag_model }}</strong> flagged in <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>{% if dataset == "combined" %} (DNS and DoS merged, tagged by source){% endif %}. Export for offline investigation, or forward straight to a SIEM.</p>
+
+<div class="panel tick" style="margin-bottom:20px;">
+  <form method="get" style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+    <input type="hidden" name="dataset" value="{{ dataset }}">
+    <label class="caption">Flag with
+      <select name="flag_model" class="dataset-select" onchange="this.form.submit()">
+        {% for m in model_order %}
+        <option value="{{ m }}" {{ 'selected' if m==flag_model }}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <span class="caption mono">{{ "{:,}".format(total) }} incidents matched</span>
+    <div class="spacer"></div>
+    <a class="btn" href="/api/incidents/export.csv?dataset={{ dataset }}&flag_model={{ flag_model }}">Export CSV</a>
+    <a class="btn" href="/api/incidents/export.cef?dataset={{ dataset }}&flag_model={{ flag_model }}">Export CEF</a>
+  </form>
+</div>
+
+<div class="section-title">Forward to SIEM (Splunk HTTP Event Collector)</div>
+<div class="panel tick" style="margin-bottom:20px;">
+  <p class="caption" style="margin-bottom:12px;">Sends the most recent incidents (up to 500) as a batch of HEC events. Works with any collector that speaks Splunk's documented HEC API, not just Splunk itself. Untested against a live Splunk instance here, but the request shape matches Splunk's spec exactly.</p>
+  <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <input type="text" id="hec-url" placeholder="https://your-splunk:8088" class="dataset-select" style="flex:1; min-width:220px;">
+    <input type="password" id="hec-token" placeholder="HEC token" class="dataset-select" style="flex:1; min-width:180px;">
+    <button class="btn btn-primary" id="hec-send" type="button">Send incidents</button>
+    <span id="hec-status" class="caption"></span>
+  </div>
+</div>
+
+<div class="tbl-wrap panel tick" style="margin-bottom:20px;">
+  <table>
+    <thead><tr>
+      <th>time</th><th>source</th><th>dest</th><th>proto</th><th>len</th>
+      {% if has_source_col %}<th>dataset</th>{% endif %}
+      <th>label</th><th>score</th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono">{{ r.timestamp }}</td>
+        <td class="mono">{{ r.source_ip }}:{{ r.source_port }}</td>
+        <td class="mono">{{ r.dest_ip }}:{{ r.dest_port }}</td>
+        <td>{{ r.protocol }}</td>
+        <td class="mono">{{ r.packet_length }}</td>
+        {% if has_source_col %}<td>{{ r.source_dataset }}</td>{% endif %}
+        <td>{% if r.label == 1 %}<span class="pill pill-fn">attack</span>{% elif r.label == 0 %}<span class="caption">normal</span>{% else %}<span class="caption">-</span>{% endif %}</td>
+        <td class="mono">{{ "%.3f"|format(r.score) if r.score is not none else "-" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="caption" style="padding:20px;">No incidents matched this model on this dataset.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div style="display:flex; gap:10px; align-items:center;">
+  {% if page > 1 %}<a class="btn" href="?dataset={{ dataset }}&flag_model={{ flag_model }}&page={{ page - 1 }}">← Prev</a>{% endif %}
+  <span class="caption mono">page {{ page }} / {{ total_pages }}</span>
+  {% if page < total_pages %}<a class="btn" href="?dataset={{ dataset }}&flag_model={{ flag_model }}&page={{ page + 1 }}">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+<script>
+document.getElementById("hec-send").addEventListener("click", () => {
+  const status = document.getElementById("hec-status");
+  const url = document.getElementById("hec-url").value.trim();
+  const token = document.getElementById("hec-token").value.trim();
+  if (!url || !token) { status.textContent = "Enter a HEC URL and token first."; return; }
+  status.textContent = "Sending...";
+  const fd = new FormData();
+  fd.append("dataset", {{ dataset|tojson }});
+  fd.append("flag_model", {{ flag_model|tojson }});
+  fd.append("hec_url", url);
+  fd.append("hec_token", token);
+  fetch("/api/incidents/forward-siem", {method: "POST", body: fd})
+    .then(r => r.json())
+    .then(res => {
+      status.textContent = res.ok
+        ? `Sent ${res.count} events (HTTP ${res.status_code}).`
+        : `Failed: ${res.body || res.status_code}`;
+    })
+    .catch(e => { status.textContent = "Failed: " + e; });
+});
+</script>
+{% endblock %}

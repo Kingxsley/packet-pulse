@@ -3,14 +3,14 @@
 {% block content %}
 <div class="eyebrow">Live network monitor</div>
 <h1 class="page-title">Threat Monitor</h1>
-<p class="page-sub">Replays real captured traffic from <strong>{{ dataset_labels.get(dataset, dataset) }}</strong> through the trained models in near real time, packet by packet. This is a replay of recorded captures, not a live tap on your network. See <a href="/settings?dataset={{ dataset }}">Settings</a> for what a real deployment would need instead.</p>
+<p class="page-sub">Replays real captured traffic from <strong>{{ dataset_labels.get(dataset, dataset) }}</strong> through the trained models in near real time, packet by packet. This is a replay of recorded captures, not a live tap on your network. Anything flagged here shows up on the <a href="/incidents?dataset={{ dataset }}">Incidents</a> page for investigation and export. See <a href="/settings?dataset={{ dataset }}">Settings</a> for what a real deployment would need instead.</p>
 
 <div class="panel tick" style="margin-bottom:20px;">
   <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
     <label class="caption">Flag attacks using
       <select id="flag-model" class="dataset-select">
         <option>Isolation Forest</option><option>Autoencoder</option>
-        <option>Random Forest</option><option selected>XGBoost</option>
+        <option selected>Random Forest</option><option>XGBoost</option>
       </select>
     </label>
     <label class="caption">Speed
@@ -35,13 +35,14 @@
 <div class="section-title">Live feed</div>
 <div class="panel tick feed-wrap" id="feed-wrap">
   <table>
-    <thead><tr><th>time</th><th>source</th><th>dest</th><th>proto</th><th>len</th><th>score</th><th>verdict</th></tr></thead>
+    <thead><tr><th>time</th><th>source</th><th>dest</th><th>proto</th><th>len</th>{% if dataset == "combined" %}<th>capture</th>{% endif %}<th>score</th><th>verdict</th></tr></thead>
     <tbody id="feed-body"></tbody>
   </table>
 </div>
 
 <script>
 const dataset = {{ dataset|tojson }};
+const showSource = dataset === "combined";
 let es = null;
 let scanned = 0, flagged = 0, startTime = null, recent = [];
 
@@ -92,6 +93,7 @@ function onEvent(e) {
     <td class="mono">${p.dest_ip}:${p.dest_port}</td>
     <td>${p.protocol}</td>
     <td class="mono">${p.packet_length}</td>
+    ${showSource ? `<td class="caption">${p.source_dataset || "-"}</td>` : ""}
     <td class="mono">${p.score !== null ? p.score.toFixed(3) : "-"}</td>
     <td>${verdict}</td>`;
   const body = document.getElementById("feed-body");

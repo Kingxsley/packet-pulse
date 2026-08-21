@@ -10,6 +10,8 @@ MODEL_ORDER = ["Isolation Forest", "Autoencoder", "Random Forest", "XGBoost"]
 MODEL_COLORS = {"Isolation Forest": "#ffb020", "Autoencoder": "#e5484d",
                  "Random Forest": "#3fd0c9", "XGBoost": "#5b8def"}
 
+DEFAULT_THRESHOLDS = {"Random Forest": 0.5, "XGBoost": 0.5, "Isolation Forest": 20, "Autoencoder": 5}
+
 OUTCOME_LABELS = {
     (1, 1): "True Positive",
     (0, 1): "False Positive",

@@ -101,6 +101,20 @@ def models_for(dataset: str) -> dict:
     return loaded
 
 
+def load_combined_results() -> pd.DataFrame:
+    """Merges every trained dataset's results into one frame tagged with
+    `source_dataset`, for the cross-surface Threat Monitor / Incidents views.
+    Not cached separately -- it's cheap, built from already-cached frames."""
+    frames = []
+    for name in available_datasets():
+        df = load_results(name).copy()
+        df["source_dataset"] = name
+        frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True, sort=False)
+
+
 def invalidate(dataset: str) -> None:
     """Drops cached entries for a dataset after a retrain."""
     with _lock:
