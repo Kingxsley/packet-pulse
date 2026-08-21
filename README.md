@@ -8,12 +8,6 @@ alongside it and depended on a live cloud database with a hardcoded API
 token. This project restructures it into a runnable pipeline over the local
 packet captures, and fixes the bugs described below.
 
-> **⚠️ Security note:** the original script contained a live InfluxDB Cloud
-> API token committed in plaintext. It has been redacted from
-> `legacy/original_script.py` in this project, but **the original credential
-> was exposed in the zip you provided — you should rotate/revoke that token
-> in your InfluxDB Cloud account now**, since anyone who had that file could
-> read/write your bucket.
 
 ## What it does
 
