@@ -17,7 +17,7 @@ from .features import engineer_features
 SHAP_SAMPLE_SIZE = 5000  # cap SHAP computation cost on large datasets
 
 
-def run(dataset_name: str, tune: bool = False, train_autoencoder: bool = True) -> dict:
+def run(dataset_name: str, tune: bool = False, train_autoencoder: bool = False) -> dict:
     t0 = time.time()
     print(f"\n{'=' * 60}\nDataset: {dataset_name}\n{'=' * 60}")
 

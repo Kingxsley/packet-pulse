@@ -12,6 +12,6 @@
   "train_rows": 79004,
   "test_rows": 33860,
   "isolation_forest_contamination": 0.01,
-  "autoencoder_trained": true,
-  "elapsed_sec": 124.99523615837097
+  "autoencoder_trained": false,
+  "elapsed_sec": 8.67136836051941
 }

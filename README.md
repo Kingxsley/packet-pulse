@@ -147,15 +147,19 @@ retraining stays a background job instead of a page someone has to babysit.
 
 ## Data
 
-Three packet captures, all sharing the same schema (`source_ip, dest_ip,
+Two packet captures, both sharing the same schema (`source_ip, dest_ip,
 source_port, dest_port, protocol, packet_length, timestamp,
 inter_arrival_time, label`):
 
 | dataset | file | rows | attack rate |
 |---|---|---|---|
 | `dns` | `DNSpackets_output.json` | 306,838 | ~37% |
-| `dos` | `DOSpackets_output.json` | 112,865 | ~0.1% |
-| `dos_clean` | `Clean_DOS_Capstone.csv` | 112,864 | ~0.1% (deduplicated/cleaned export of `dos`) |
+| `dos_clean` | `Clean_DOS_Capstone.csv` | 112,864 | ~0.1% |
+
+There used to be a third, `dos`: the raw, uncleaned DoS capture that
+`dos_clean` is a deduplicated export of. We dropped it (see "What we
+removed" below) since nothing in the app ever used it differently from
+`dos_clean`, it was just 34MB of dead weight in the repo.
 
 ## Results
 
@@ -166,7 +170,6 @@ Test-set metrics from a full run of both datasets (defaults, no `--tune`):
 | model | precision | recall | F1 | ROC-AUC |
 |---|---|---|---|---|
 | Isolation Forest | 0.030 | 0.227 | 0.052 | 0.779 |
-| Autoencoder | 0.019 | 0.750 | 0.036 | 0.939 |
 | Random Forest | 0.456 | 0.932 | 0.612 | 0.991 |
 | XGBoost | 0.092 | 0.932 | 0.168 | 0.990 |
 
@@ -175,7 +178,6 @@ Test-set metrics from a full run of both datasets (defaults, no `--tune`):
 | model | precision | recall | F1 | ROC-AUC |
 |---|---|---|---|---|
 | Isolation Forest | 0.585 | 0.581 | 0.583 | 0.810 |
-| Autoencoder | 0.865 | 0.538 | 0.663 | 0.844 |
 | Random Forest | 0.9999 | 1.000 | 0.9999 | 1.000 |
 | XGBoost | 0.9999 | 1.000 | 0.9999 | 1.000 |
 
@@ -260,6 +262,44 @@ it would take rather than leaving it vague:
    the "replay of recorded captures" framing since it'd actually be live.
 
 None of this is implemented. It's the honest next step, not a feature.
+
+## Configuration
+
+Everything here degrades gracefully when unset, so local dev
+(`uvicorn backend.main:app --reload`) never needs any of it configured.
+
+| Variable | What it does |
+|---|---|
+| `APP_PASSWORD` | Turns on the login gate. Unset means the app is fully public, which is fine for local dev and is how this ran for most of the build, but not how it should stay deployed |
+| `SESSION_SECRET` | Signs the login session cookie. Falls back to `APP_PASSWORD` if unset, which is fine, but set it separately if you'd rather not reuse the login password as a signing key |
+| `DATABASE_URL` | Postgres connection string. Without it, Live Scoring imports and Incidents triage status just don't persist; everything else still works |
+| `ALERT_WEBHOOK_URL` | A Slack incoming webhook URL (or anything that accepts `{"text": "..."}`). Without it, Critical-severity flags don't push anywhere; you'd only see them by visiting Incidents |
+
+`APP_PASSWORD` is the one that actually matters for a real deployment: a
+public URL with a database anyone can mutate (wipe the live model via
+Retrain, edit anyone else's triage status) was the single biggest gap this
+project had once it stopped being a private demo.
+
+## What we removed, and why
+
+Not everything we built earned a permanent place. Two things came out
+once we looked at this as a real system instead of a place to show off
+every idea we'd had:
+
+- **The Autoencoder.** It was the weakest or tied-weakest model on both
+  datasets (F1 0.036 on `dos_clean`, worse than Isolation Forest; 0.660 on
+  `dns`, worst of the four), and TensorFlow was by a wide margin the
+  heaviest dependency in the project, a ~1GB install that made every
+  Railway build take 5+ minutes on its own. Cutting it dropped build time
+  and image size substantially for a model that wasn't winning anywhere.
+  The training code didn't go anywhere (`src/models.py`, still callable via
+  `run.py --with-autoencoder` for local comparison), it's just not part of
+  the deployed app's model set (`backend/scoring.py`) or dependencies
+  (`requirements.txt`) anymore.
+- **The raw `dos` capture.** `Clean_DOS_Capstone.csv` is a deduplicated
+  export of it, and nothing in the app ever used the raw version
+  differently, it was just a second, worse copy of the same data taking up
+  34MB in the repo.
 
 ## What we fixed from the original script
 

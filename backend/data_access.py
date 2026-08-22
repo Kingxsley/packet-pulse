@@ -91,11 +91,6 @@ def models_for(dataset: str) -> dict:
         if path.exists():
             loaded[key] = joblib.load(path)
 
-    ae_path = config.MODELS_DIR / f"{dataset}_autoencoder.keras"
-    if ae_path.exists():
-        from tensorflow.keras.models import load_model
-        loaded["autoencoder"] = load_model(ae_path)
-
     with _lock:
         _model_cache[dataset] = (newest, loaded)
     return loaded

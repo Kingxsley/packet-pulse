@@ -13,12 +13,13 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sklearn.metrics import f1_score, precision_score, recall_score
+from starlette.middleware.sessions import SessionMiddleware
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend import charts, data_access as da, db, siem  # noqa: E402
+from backend import alerts, auth, charts, data_access as da, db, siem  # noqa: E402
 from backend.scoring import (DEFAULT_THRESHOLDS, MODEL_COLORS, MODEL_ORDER,  # noqa: E402
                               apply_thresholds, outcome_counts, pred_col,
                               score_col, severity_tier)
@@ -27,7 +28,6 @@ from src.features import engineer_features  # noqa: E402
 
 DATASET_LABELS = {
     "dns": "DNS capture (306k rows)",
-    "dos": "DoS capture, raw (112k rows)",
     "dos_clean": "DoS capture, cleaned (112k rows)",
     "combined": "Combined: DNS + DoS",
 }
@@ -41,6 +41,41 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 _jobs: dict[str, dict] = {}
 
 
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    if not auth.enabled() or auth.is_public(request.url.path):
+        return await call_next(request)
+    if request.session.get("authed"):
+        return await call_next(request)
+    return RedirectResponse(f"/login?next={request.url.path}")
+
+
+# Added after the auth-check middleware above so it ends up as the
+# outermost layer (Starlette runs the most-recently-added middleware
+# first), meaning request.session is already populated by the time
+# require_login reads it.
+app.add_middleware(SessionMiddleware, secret_key=auth.SESSION_SECRET, same_site="lax")
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, next: str = "/"):
+    return templates.TemplateResponse(request, "login.html", {"next": next, "error": False})
+
+
+@app.post("/login")
+def login_submit(request: Request, password: str = Form(...), next: str = Form("/")):
+    if auth.check_password(password):
+        request.session["authed"] = True
+        return RedirectResponse(next or "/", status_code=303)
+    return templates.TemplateResponse(request, "login.html", {"next": next, "error": True}, status_code=401)
+
+
+@app.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
+
+
 def _selectable_datasets() -> list[str]:
     available = da.available_datasets()
     return available + ["combined"] if len(available) > 1 else available
@@ -50,6 +85,7 @@ def _base_ctx(request: Request, dataset: str, active: str) -> dict:
     return {
         "request": request, "dataset": dataset, "datasets": _selectable_datasets(),
         "dataset_labels": DATASET_LABELS, "active": active, "base_path": request.url.path,
+        "auth_enabled": auth.enabled(),
     }
 
 
@@ -137,7 +173,13 @@ async def monitor_stream(request: Request, dataset: str, flag_model: str = "Rand
             row = df.iloc[counters[src_i] % len(df)]
             counters[src_i] += 1
             src_i = (src_i + 1) % len(sources)
-            yield f"data: {json.dumps(_row_payload(row, pc, sc))}\n\n"
+            payload = _row_payload(row, pc, sc)
+            if payload["flagged"] and severity_tier(payload["score"]) == "Critical":
+                alerts.alert_critical_packet(
+                    _incident_id(dataset, payload), DATASET_LABELS.get(dataset, dataset), flag_model,
+                    payload["source_ip"], payload["dest_ip"], payload["score"] or 0.0,
+                )
+            yield f"data: {json.dumps(payload)}\n\n"
             await asyncio.sleep(interval)
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers={
@@ -159,7 +201,7 @@ def overview(request: Request, dataset: str = "dos_clean"):
 def settings(request: Request, dataset: str = "dos_clean"):
     dataset = _validate_dataset(dataset)
     ctx = _base_ctx(request, dataset, "settings")
-    ctx.update(summary=da.summary(dataset))
+    ctx.update(summary=da.summary(dataset), alerts_enabled=alerts.enabled())
     return templates.TemplateResponse(request, "settings.html", ctx)
 
 
@@ -190,11 +232,11 @@ def compare(request: Request, dataset: str = "dos_clean"):
 
 
 @app.get("/api/compare")
-def api_compare(dataset: str, rf: float = 0.5, xgb: float = 0.5, iso: float = 20, ae: float = 5):
+def api_compare(dataset: str, rf: float = 0.5, xgb: float = 0.5, iso: float = 20):
     dataset = _validate_dataset(dataset)
     df = da.load_results(dataset)
     test_df = apply_thresholds(df[df["split"] == "test"], {
-        "Random Forest": rf, "XGBoost": xgb, "Isolation Forest": iso, "Autoencoder": ae,
+        "Random Forest": rf, "XGBoost": xgb, "Isolation Forest": iso,
     })
 
     metrics_rows, confusion, models_with_scores = [], {}, []
@@ -279,9 +321,6 @@ async def api_live_score(dataset: str = Form(...), flag_model: str = Form(...),
         scored["score_xgboost"] = artifacts["xgboost"].predict_proba(X_scaled)[:, 1]
     if "isolation_forest" in artifacts:
         scored["score_isolation_forest"] = -artifacts["isolation_forest"].score_samples(X_scaled)
-    if "autoencoder" in artifacts:
-        from src.models import autoencoder_scores
-        scored["score_autoencoder"] = autoencoder_scores(artifacts["autoencoder"], X_scaled)
 
     scored = apply_thresholds(scored, DEFAULT_THRESHOLDS)
 
@@ -309,6 +348,12 @@ async def api_live_score(dataset: str = Form(...), flag_model: str = Form(...),
     if db.enabled():
         import_id = db.save_import(dataset, source_label, flag_model, scored, flag_pc, metrics_out)
 
+    flag_sc = score_col(flag_model)
+    if alerts.enabled() and flag_sc in scored:
+        critical_count = int((scored.loc[scored[flag_pc] == 1, flag_sc].map(severity_tier) == "Critical").sum())
+        alerts.alert_scan_summary(source_label, DATASET_LABELS.get(dataset, dataset), flag_model,
+                                   critical_count, len(scored))
+
     preview_cols = ["timestamp", "source_ip", "dest_ip", "protocol", "packet_length", "Flagged"] + \
         (["label", "Outcome"] if has_labels else [])
     preview = scored[preview_cols].head(200).astype(str).to_dict(orient="records")
@@ -319,18 +364,65 @@ async def api_live_score(dataset: str = Form(...), flag_model: str = Form(...),
     })
 
 
+_retrain_locks: dict[str, threading.Lock] = {}
+_retrain_locks_guard = threading.Lock()
+
+
+def _retrain_lock(dataset: str) -> threading.Lock:
+    with _retrain_locks_guard:
+        return _retrain_locks.setdefault(dataset, threading.Lock())
+
+
+def _dataset_artifact_paths(dataset: str) -> list[Path]:
+    """Every file a dataset currently owns under outputs/, for backup/restore."""
+    return list(config.RESULTS_DIR.glob(f"{dataset}_*")) + list(config.MODELS_DIR.glob(f"{dataset}_*"))
+
+
+def _backup_dataset(dataset: str) -> Path:
+    import shutil
+    backup_dir = config.OUTPUT_DIR / "_retrain_backup" / dataset
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    for p in _dataset_artifact_paths(dataset):
+        shutil.copy2(p, backup_dir / p.name)
+    return backup_dir
+
+
+def _restore_dataset(dataset: str, backup_dir: Path) -> None:
+    import shutil
+    if not backup_dir.exists():
+        return
+    for p in _dataset_artifact_paths(dataset):
+        p.unlink(missing_ok=True)
+    for p in backup_dir.iterdir():
+        dest_dir = config.MODELS_DIR if p.suffix in (".joblib", ".keras") else config.RESULTS_DIR
+        shutil.copy2(p, dest_dir / p.name)
+
+
 def _run_retrain(job_id: str, dataset: str, tune: bool, autoencoder: bool):
     from src.pipeline import run as run_pipeline
+
+    lock = _retrain_lock(dataset)
+    if not lock.acquire(blocking=False):
+        _jobs[job_id] = {"status": "error", "message": f"A retrain for {dataset} is already running."}
+        return
     try:
-        run_pipeline(dataset, tune=tune, train_autoencoder=autoencoder)
-        da.invalidate(dataset)
-        _jobs[job_id] = {"status": "done"}
-    except Exception as e:
-        _jobs[job_id] = {"status": "error", "message": str(e)}
+        backup_dir = _backup_dataset(dataset)
+        try:
+            run_pipeline(dataset, tune=tune, train_autoencoder=autoencoder)
+            da.invalidate(dataset)
+            _jobs[job_id] = {"status": "done"}
+        except Exception as e:
+            _restore_dataset(dataset, backup_dir)
+            da.invalidate(dataset)
+            _jobs[job_id] = {"status": "error", "message": f"Training failed, restored the previous model: {e}"}
+    finally:
+        lock.release()
 
 
 @app.post("/api/retrain")
-def api_retrain(dataset: str = Form(...), tune: bool = Form(False), autoencoder: bool = Form(True)):
+def api_retrain(dataset: str = Form(...), tune: bool = Form(False), autoencoder: bool = Form(False)):
     dataset = dataset if dataset in config.DATASET_FILES else "dos_clean"
     job_id = str(uuid.uuid4())
     _jobs[job_id] = {"status": "running"}

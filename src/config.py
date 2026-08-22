@@ -11,7 +11,6 @@ MODELS_DIR = OUTPUT_DIR / "models"
 
 DATASET_FILES = {
     "dns": DATA_DIR / "DNSpackets_output.json",
-    "dos": DATA_DIR / "DOSpackets_output.json",
     "dos_clean": DATA_DIR / "Clean_DOS_Capstone.csv",
 }
 

@@ -19,10 +19,6 @@
       <label>Isolation Forest sensitivity <span class="val mono" id="val-iso">20%</span></label>
       <input type="range" id="iso" min="1" max="50" step="1" value="20">
     </div>
-    <div class="slider-row">
-      <label>Autoencoder sensitivity <span class="val mono" id="val-ae">5%</span></label>
-      <input type="range" id="ae" min="1" max="50" step="1" value="5">
-    </div>
   </div>
 </div>
 
@@ -38,7 +34,6 @@
 <div class="section-title">Confusion matrices</div>
 <div class="grid grid-4" style="margin-bottom:28px;">
   <div class="panel tick"><div id="cm-isolation_forest"></div></div>
-  <div class="panel tick"><div id="cm-autoencoder"></div></div>
   <div class="panel tick"><div id="cm-random_forest"></div></div>
   <div class="panel tick"><div id="cm-xgboost"></div></div>
 </div>
@@ -51,7 +46,7 @@
 
 <script>
 const dataset = {{ dataset|tojson }};
-const modelKeys = ["isolation_forest", "autoencoder", "random_forest", "xgboost"];
+const modelKeys = ["isolation_forest", "random_forest", "xgboost"];
 let timer = null;
 
 function render(payload) {
@@ -80,7 +75,6 @@ function currentThresholds() {
     rf: document.getElementById("rf").value,
     xgb: document.getElementById("xgb").value,
     iso: document.getElementById("iso").value,
-    ae: document.getElementById("ae").value,
   };
 }
 
@@ -88,7 +82,6 @@ function updateLabels() {
   document.getElementById("val-rf").textContent = parseFloat(document.getElementById("rf").value).toFixed(2);
   document.getElementById("val-xgb").textContent = parseFloat(document.getElementById("xgb").value).toFixed(2);
   document.getElementById("val-iso").textContent = document.getElementById("iso").value + "%";
-  document.getElementById("val-ae").textContent = document.getElementById("ae").value + "%";
 }
 
 function fetchAndRender() {
@@ -100,7 +93,7 @@ function fetchAndRender() {
     .then(payload => { render(payload); document.getElementById("loading").style.display = "none"; });
 }
 
-["rf", "xgb", "iso", "ae"].forEach(id => {
+["rf", "xgb", "iso"].forEach(id => {
   document.getElementById(id).addEventListener("input", () => {
     updateLabels();
     clearTimeout(timer);

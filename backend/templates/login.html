@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · Packet Pulse</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-box { width: 100%; max-width: 360px; padding: 0 20px; }
+  .login-brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; justify-content: center; margin-bottom: 28px; }
+  input[type="password"] {
+    width: 100%; font-family: var(--font-mono); font-size: 0.9rem; background: var(--surface); color: var(--paper);
+    border: 1px solid var(--line-strong); border-radius: 3px; padding: 11px 14px; margin-bottom: 14px;
+  }
+  .login-error { color: var(--alert); font-size: 0.85rem; margin-bottom: 14px; }
+  .login-btn { width: 100%; justify-content: center; }
+</style>
+</head>
+<body>
+<div class="login-box panel tick">
+  <div class="login-brand">
+    <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><rect x="0.5" y="0.5" width="25" height="25" rx="3" stroke="#3a4452"/><path d="M3 15L7 15L9.5 8L13 20L15.5 11L17.5 15L23 15" stroke="#ffb020" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Packet Pulse
+  </div>
+  {% if error %}<p class="login-error">Wrong password. Try again.</p>{% endif %}
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="password" name="password" placeholder="Password" autofocus required>
+    <button class="btn btn-primary login-btn" type="submit">Sign in</button>
+  </form>
+</div>
+</body>
+</html>

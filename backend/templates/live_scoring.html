@@ -4,7 +4,7 @@
 <div class="eyebrow">Score anything, instantly</div>
 <h1 class="page-title">Live Scoring</h1>
 <p class="page-sub">Upload raw packet data (CSV or JSON) with columns <code class="mono">source_ip, dest_ip, source_port, dest_port, protocol, packet_length, timestamp, inter_arrival_time</code> (+ optional <code class="mono">label</code>), scored against the models currently trained for <strong>{{ dataset_labels.get(dataset, dataset) }}</strong>.</p>
-<p class="caption">Isolation Forest/Autoencoder sensitivity is a percentile of the uploaded batch's own scores, so it's most meaningful on batches of at least a few dozen packets rather than single rows.</p>
+<p class="caption">Isolation Forest sensitivity is a percentile of the uploaded batch's own scores, so it's most meaningful on batches of at least a few dozen packets rather than single rows.</p>
 
 {% if db_enabled %}
 <div class="section-title">Import history (Postgres)</div>
@@ -24,7 +24,7 @@
     </label>
     <label class="caption">Flag attacks using
       <select id="flag-model" class="dataset-select">
-        <option>Isolation Forest</option><option>Autoencoder</option>
+        <option>Isolation Forest</option>
         <option selected>Random Forest</option><option>XGBoost</option>
       </select>
     </label>

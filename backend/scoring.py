@@ -6,11 +6,15 @@ Live Scoring routes.
 import numpy as np
 import pandas as pd
 
-MODEL_ORDER = ["Isolation Forest", "Autoencoder", "Random Forest", "XGBoost"]
-MODEL_COLORS = {"Isolation Forest": "#ffb020", "Autoencoder": "#e5484d",
-                 "Random Forest": "#3fd0c9", "XGBoost": "#5b8def"}
+# Autoencoder dropped from the app-facing model set: it was the weakest or
+# tied-weakest model on both datasets, and TensorFlow was by far the
+# heaviest dependency in the project (see README). src/models.py still has
+# the training code, and `run.py --with-autoencoder` still trains it for
+# local/CLI comparison, but the deployed app never loads or offers it.
+MODEL_ORDER = ["Isolation Forest", "Random Forest", "XGBoost"]
+MODEL_COLORS = {"Isolation Forest": "#ffb020", "Random Forest": "#3fd0c9", "XGBoost": "#5b8def"}
 
-DEFAULT_THRESHOLDS = {"Random Forest": 0.5, "XGBoost": 0.5, "Isolation Forest": 20, "Autoencoder": 5}
+DEFAULT_THRESHOLDS = {"Random Forest": 0.5, "XGBoost": 0.5, "Isolation Forest": 20}
 
 OUTCOME_LABELS = {
     (1, 1): "True Positive",

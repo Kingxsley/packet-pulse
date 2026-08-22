@@ -8,3 +8,4 @@ __pycache__/
 # and per-row results ARE committed so the deployed dashboard works
 # out of the box without needing a training run first.
 outputs/figures/
+outputs/_retrain_backup/

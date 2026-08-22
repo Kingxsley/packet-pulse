@@ -25,12 +25,15 @@
       <a href="/settings?dataset={{ dataset }}" class="navlink-secondary {{ 'active' if active=='settings' }}">Settings</a>
     </div>
     <div class="spacer"></div>
-    <span class="live-pill"><span class="live-dot"></span>4 models scoring live</span>
+    <span class="live-pill"><span class="live-dot"></span>3 models scoring live</span>
     <select class="dataset-select" onchange="location.href='{{ base_path }}?dataset='+this.value">
       {% for d in datasets %}
       <option value="{{ d }}" {{ 'selected' if d==dataset }}>{{ dataset_labels.get(d, d) }}</option>
       {% endfor %}
     </select>
+    {% if auth_enabled %}
+    <form method="post" action="/logout" style="margin:0;"><button class="btn" type="submit">Log out</button></form>
+    {% endif %}
   </nav>
 </header>
 <main class="wrap">
