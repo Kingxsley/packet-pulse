@@ -43,11 +43,14 @@ _jobs: dict[str, dict] = {}
 
 @app.middleware("http")
 async def require_login(request: Request, call_next):
-    if not auth.enabled() or auth.is_public(request.url.path):
+    path = request.url.path
+    if not auth.enabled() or not auth.is_protected(path):
         return await call_next(request)
     if request.session.get("authed"):
         return await call_next(request)
-    return RedirectResponse(f"/login?next={request.url.path}")
+    if path.startswith("/api/"):
+        return JSONResponse({"error": "Login required."}, status_code=401)
+    return RedirectResponse(f"/login?next={path}")
 
 
 # Added after the auth-check middleware above so it ends up as the
@@ -85,7 +88,7 @@ def _base_ctx(request: Request, dataset: str, active: str) -> dict:
     return {
         "request": request, "dataset": dataset, "datasets": _selectable_datasets(),
         "dataset_labels": DATASET_LABELS, "active": active, "base_path": request.url.path,
-        "auth_enabled": auth.enabled(),
+        "auth_enabled": auth.enabled(), "authed": bool(request.session.get("authed")),
     }
 
 
