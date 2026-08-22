@@ -1,5 +1,5 @@
 <title>Packet Pulse</title>
-<meta name="description" content="Four ML detection models score every packet in real time, flag attacks, and show you every false positive and false negative. No black-box accuracy score to take on faith.">
+<meta name="description" content="Three ML detection models score every packet in real time, flag attacks, and show you every false positive and false negative. No black-box accuracy score to take on faith.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -357,10 +357,10 @@
       <div class="hero-copy">
         <span class="eyebrow">MBIS5015 Capstone · Network Anomaly Detection</span>
         <h1>Know which packet<br>is <em>the attack.</em></h1>
-        <p class="hero-sub">Packet Pulse watches traffic live, packet by packet, and scores it against four detection models in real time, not just a chart of past accuracy. Every flag is labeled true or false so you can see exactly what it caught and what it missed.</p>
+        <p class="hero-sub">Packet Pulse watches traffic live, packet by packet, and scores it against three detection models in real time, not just a chart of past accuracy. Every flag is labeled true or false so you can see exactly what it caught and what it missed.</p>
         <div class="trust-row">
           <span class="trust-chip"><span class="dot"></span>Live threat monitor, not just static charts</span>
-          <span class="trust-chip"><span class="dot"></span>4 models, one shared test set</span>
+          <span class="trust-chip"><span class="dot"></span>3 models, one shared test set</span>
           <span class="trust-chip"><span class="dot"></span>Every false positive labeled</span>
         </div>
         <div class="hero-ctas">
@@ -372,7 +372,7 @@
       <div class="scope tick tick-signal">
         <div class="scope-head">
           <span class="label">Live signal · inter_arrival_time</span>
-          <span class="live"><span class="live-dot"></span>4 models scoring</span>
+          <span class="live"><span class="live-dot"></span>3 models scoring</span>
         </div>
         <div class="scope-canvas">
           <svg viewBox="0 0 520 220" preserveAspectRatio="none">
@@ -401,7 +401,7 @@
     <div class="wrap reveal">
       <div class="stat-grid">
         <div class="stat"><div class="num accent">419,702</div><div class="desc">packets analyzed across both captures</div></div>
-        <div class="stat"><div class="num">4</div><div class="desc">detection models trained side-by-side</div></div>
+        <div class="stat"><div class="num">3</div><div class="desc">detection models trained side-by-side</div></div>
         <div class="stat"><div class="num">0.9999</div><div class="desc">peak F1, tuned classifiers on the DNS capture</div></div>
         <div class="stat"><div class="num">&lt;4 min</div><div class="desc">end-to-end training, either capture</div></div>
       </div>
@@ -416,8 +416,8 @@
         <p>Traditional detection matches known patterns. A DNS flood or DoS burst that doesn't match a signature sails straight through, and a single anomaly-detection model that <em>does</em> catch it usually can't tell you how many normal packets it flagged along the way.</p>
       </div>
       <div class="card-b">
-        <h3>We run four models and show our work</h3>
-        <p>Two unsupervised models (Isolation Forest, Autoencoder) learn what normal traffic looks like with no labels at all. Two supervised models (Random Forest, XGBoost) learn attacks directly. Every one of them is scored on the same held-out packets, and every flag comes with a reason.</p>
+        <h3>We run three models and show our work</h3>
+        <p>Isolation Forest learns what normal traffic looks like with no labels at all. Random Forest and XGBoost learn attacks directly. Every one of them is scored on the same held-out packets, and every flag comes with a reason.</p>
       </div>
     </div>
   </section>
@@ -440,7 +440,7 @@
       <div class="pstep r-item">
         <span class="idx">03</span>
         <h4>Train</h4>
-        <p>Isolation Forest &amp; Autoencoder learn "normal" unsupervised. Random Forest &amp; XGBoost learn attacks directly. One shared held-out test split.</p>
+        <p>Isolation Forest learns "normal" unsupervised. Random Forest &amp; XGBoost learn attacks directly. One shared held-out test split.</p>
       </div>
       <div class="pstep r-item">
         <span class="idx">04</span>
@@ -459,7 +459,7 @@
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M2 11H6L8.5 4L13 18L15.5 11H20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         <h4>Threat monitor</h4>
         <p>The front door of the app: real captured packets replayed through the trained models in near real time, scored packet by packet, with a live feed, a running flag rate, and a threat-level indicator that escalates when the traffic gets hostile. Merges the DNS and DoS captures into one feed too, so both attack surfaces are watched at once instead of one at a time. This is what a SOC-facing view of the pipeline looks like, not a chart.</p>
-        <span class="tag">→ <b>Threat Monitor</b> page</span>
+        <span class="tag">→ <b>Dashboard</b> page</span>
       </div>
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 4H18V16L14 20H4V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 9H14M8 13H12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
@@ -471,7 +471,7 @@
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 15V3M11 3L6 8M11 3L16 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 15V17.5C3 18.6 3.9 19.5 5 19.5H17C18.1 19.5 19 18.6 19 17.5V15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
         <h4>Score anything, instantly</h4>
         <p>Drop in a CSV or JSON of raw packets and get back a verdict, a confidence score, and, when you have ground truth, a true/false positive/negative breakdown per row.</p>
-        <span class="tag">→ <b>Live Scoring</b> page</span>
+        <span class="tag">→ <b>Scan</b> page</span>
       </div>
     </div>
 
@@ -480,7 +480,7 @@
       <div class="feat r-item">
         <span class="icon"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 19V13M9 19V6M15 19V10M21 19V3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
         <h4>Overview &amp; metrics</h4>
-        <p>Row counts, attack rate, and precision/recall/F1/ROC-AUC for all four models, at a glance, updated the moment a new training run finishes.</p>
+        <p>Row counts, attack rate, and precision/recall/F1/ROC-AUC for all three models, at a glance, updated the moment a new training run finishes.</p>
         <span class="tag">→ <b>Overview</b> page</span>
       </div>
       <div class="feat r-item">
@@ -530,7 +530,7 @@
 
   <section class="wrap" id="models">
     <span class="eyebrow">The roster</span>
-    <h2>Four models, one shared test set</h2>
+    <h2>Three models, one shared test set</h2>
     <p class="lede">Best-case scores below are from our balanced DNS capture (37% attack rate, 92,052 held-out packets). See the proof panel above for the harder, realistically imbalanced case.</p>
     <div class="tbl-wrap reveal">
       <table>
@@ -539,7 +539,6 @@
         </thead>
         <tbody>
           <tr><td class="mname">Isolation Forest</td><td><span class="pill pill-unsup">Unsupervised</span></td><td class="num">0.583</td><td class="num">0.810</td><td>Distance from partitioned trees</td></tr>
-          <tr><td class="mname">Autoencoder</td><td><span class="pill pill-unsup">Unsupervised</span></td><td class="num">0.660</td><td class="num">0.792</td><td>Reconstruction error</td></tr>
           <tr><td class="mname">Random Forest</td><td><span class="pill pill-sup">Supervised</span></td><td class="num">0.9999</td><td class="num">1.000</td><td>Built-in feature importances</td></tr>
           <tr><td class="mname">XGBoost</td><td><span class="pill pill-sup">Supervised</span></td><td class="num">0.9999</td><td class="num">1.000</td><td>Per-prediction SHAP values</td></tr>
         </tbody>
@@ -555,7 +554,6 @@
       <span class="stack-badge">FastAPI</span>
       <span class="stack-badge">scikit-learn</span>
       <span class="stack-badge">XGBoost</span>
-      <span class="stack-badge">TensorFlow / Keras</span>
       <span class="stack-badge">SHAP</span>
       <span class="stack-badge">PostgreSQL</span>
       <span class="stack-badge">Plotly</span>
@@ -571,8 +569,8 @@
         <p>Packet Pulse deploys straight from GitHub to Railway on every push, models and all. Open it and you're looking at the real dashboard, not a mockup.</p>
         <ul class="checks">
           <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Both capture datasets included, already trained</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Import your own CSV/JSON packet batch from the Live Scoring tab. It's saved to Postgres so it's still there next time</li>
-          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Retrain from the sidebar after adding your own captures</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Import your own CSV/JSON packet batch from the Scan tab, no account needed. It's saved to Postgres so it's still there next time</li>
+          <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Retrain from Settings after adding your own captures (admin login required)</li>
         </ul>
         <a class="btn btn-primary" href="https://dashboard-production-8fac.up.railway.app" target="_blank" rel="noopener" style="margin-top: 8px;">Open the live dashboard →</a>
       </div>
